@@ -1,325 +1,475 @@
-本ドキュメントは、Renesas CS+ プロジェクトファイル (.mtpj) を解析して
+# mtpj_deps.py 仕様書（Claude Code 向け実装指示書）
 
+本ドキュメントは、Renesas CS+ プロジェクトファイル (`.mtpj`) を解析して
 GitHub Copilot 用プロジェクト構造リファレンス Markdown を生成する
+ツール `mtpj_deps.py` の**完全な要件定義**です。
 
-ツール mtpj_deps.py の完全な要件定義です。
+Claude Code にはこのドキュメントを読んだうえで、
+`mtpj_deps.py` および周辺ファイル一式を実装してもらうことを想定しています。
 
-Claude Code にはこのドキュメントを読んだうえで、mtpj_deps.py および周辺ファイル一式を実装してもらうことを想定しています。
+---
 
-1. 背景と目的
+## 1. 背景と目的
 
-1.1 なぜ作るのか
+### 1.1 なぜ作るのか
 
-Renesas CS+ の .mtpj はプロジェクト構造とビルド構成を持つが、GitHub Copilot は直接読み取れない。
+- Renesas CS+ の `.mtpj` はプロジェクト構造とビルド構成を持つが、**GitHub Copilot は直接読み取れない**。
+- Copilot に「どのファイルがどのビルドモードに参加しているか」「どのヘッダに依存するか」を正しく伝えるため、`.github/copilot-instructions.md` から参照する**プロジェクト構造 Markdown** が必要。
+- 手書き・手更新では保守できないため、`.mtpj` から自動生成するツールを作る。
 
-Copilot に「どのファイルがどのビルドモードに参加しているか」「どのヘッダに依存するか」を正しく伝えるため、.github/copilot-instructions.md から参照するプロジェクト構造 Markdown が必要。
+### 1.2 利用フロー
 
-手書き・手更新では保守できないため、.mtpj から自動生成するツールを作る。
-
-1.2 利用フロー
-
+```
 .mtpj ──[mtpj_deps.py]──► copilot-project-structure.md ◄──参照── .github/copilot-instructions.md
+                                                                         │
+                                                                         ▼
+                                                                   GitHub Copilot
+```
 
-│
+---
 
-▼
+## 2. 入力 / 出力仕様
 
-GitHub Copilot
+### 2.1 入力
 
-2. 入力 / 出力仕様
+- **必須**: `.mtpj` ファイル（CS+ プロジェクトファイル、XML 形式）
+- **必須（推奨運用）**: ビルドモード名（`-m` オプション）
+- **任意**: スキャン対象のソースファイル（`.mtpj` からの相対パスで解決）
 
-2.1 入力
-
-必須: .mtpj ファイル（CS+ プロジェクトファイル、XML 形式）
-
-必須（推奨運用）: ビルドモード名（-m オプション）
-
-任意: スキャン対象のソースファイル（.mtpj からの相対パスで解決）
-
-2.2 出力
+### 2.2 出力
 
 単一の Markdown ファイル。以下3セクション構成：
 
+1. **Registered files (by category)** — カテゴリ別ファイル一覧。ビルド対象は `[B]` でマーク。
+2. **Include dependencies** — 実ソースをスキャンして抽出した `#include` 依存関係。プロジェクト内ファイルに解決できたものは `→ (project)` で明示。
+3. **Summary** — 登録ファイル数 / ビルド対象数 / カテゴリ数。
 
+### 2.3 CLI 仕様
 
-Registered files (by category) — カテゴリ別ファイル一覧。ビルド対象は [B] でマーク。
-
-Include dependencies — 実ソースをスキャンして抽出した #include 依存関係。プロジェクト内ファイルに解決できたものは → (project) で明示。
-
-Summary — 登録ファイル数 / ビルド対象数 / カテゴリ数。
-
-2.3 CLI 仕様
-
+```
 python mtpj_deps.py <project.mtpj> [options]
+```
 
-オプション必須説明<project.mtpj>✅解析対象の .mtpj パス-m, --mode MODE推奨対象ビルドモード名。省略時は CurrentBuildMode-o, --out PATH任意出力先。省略時は <mtpj名>_<mode>_deps.md--no-scan任意#include スキャンをスキップ--list-modes任意ビルドモード一覧を表示して終了--preprocess任意（新規追加）COptionD-<N> 等のマクロ定義に基づく条件ディレクティブ評価を有効化-h, --help任意ヘルプ3. .mtpj フォーマット仕様（解析対象）
+| オプション | 必須 | 説明 |
+|---|---|---|
+| `<project.mtpj>` | ✅ | 解析対象の .mtpj パス |
+| `-m`, `--mode MODE` | 推奨 | 対象ビルドモード名。省略時は `CurrentBuildMode` |
+| `-o`, `--out PATH` | 任意 | 出力先。省略時は `<mtpj名>_<mode>_deps.md` |
+| `--no-scan` | 任意 | `#include` スキャンをスキップ |
+| `--list-modes` | 任意 | ビルドモード一覧を表示して終了 |
+| `--preprocess` | 任意（**新規追加**） | `COptionD-<N>` 等のマクロ定義に基づく条件ディレクティブ評価を有効化 |
+| `-h`, `--help` | 任意 | ヘルプ |
 
-.mtpj は UTF-8 の XML。以下の要素を抽出対象とする。
+---
 
+## 3. `.mtpj` フォーマット仕様（解析対象）
 
+`.mtpj` は UTF-8 の XML。以下の要素を抽出対象とする。
 
-3.1 ファイル登録
+### 3.1 ファイル登録
 
+```xml
 <Instance Guid="...">
-
-<n>r_main.c</n>
-
-<Type>File</Type>
-
-<RelativePath>src\r_main.c</RelativePath>
-
-<ParentItem>633ddd13-...</ParentItem>
-
+  <n>r_main.c</n>
+  <Type>File</Type>
+  <RelativePath>src\r_main.c</RelativePath>
+  <ParentItem>633ddd13-...</ParentItem>
 </Instance>
+```
 
-<RelativePath> の区切り文字は \（Windows 形式）。内部処理では / に正規化。
+- `<RelativePath>` の区切り文字は `\`（Windows 形式）。内部処理では `/` に正規化。
+- `<ParentItem>` は親 Category の Guid。
 
-<ParentItem> は親 Category の Guid。
+### 3.2 カテゴリ階層
 
-3.2 カテゴリ階層
-
+```xml
 <Instance Guid="633ddd13-...">
-
-<n>コード生成</n>
-
-<Type>Category</Type>
-
-<ParentItem>4ae340d5-...</ParentItem>
-
+  <n>コード生成</n>
+  <Type>Category</Type>
+  <ParentItem>4ae340d5-...</ParentItem>
 </Instance>
+```
 
-ルートまで ParentItem を辿って "コード生成 / Platform / driver" のようなパス表記にする。
+- ルートまで `ParentItem` を辿って `"コード生成 / Platform / driver"` のようなパス表記にする。
 
-3.3 ビルドモード定義
+### 3.3 ビルドモード定義
 
 BuildTool Instance 内に以下が格納される：
 
-
-
+```xml
 <BuildModeCount>3</BuildModeCount>
-
 <BuildMode0>RABlAGYAYQB1AGwAdABCAHUAaQBsAGQA</BuildMode0>
-
 <BuildMode1>...</BuildMode1>
-
 <CurrentBuildMode>DefaultBuild</CurrentBuildMode>
+```
 
-重要: BuildMode<N> は UTF-16LE + Base64 でエンコードされている。base64.b64decode(v).decode('utf-16-le').rstrip('\x00')
+- **重要**: `BuildMode<N>` は **UTF-16LE + Base64** でエンコードされている。
+  ```python
+  base64.b64decode(v).decode('utf-16-le').rstrip('\x00')
+  ```
+- インデックス `<N>` と復号後のビルドモード名は 1:1 対応。以降の各種オプション要素は `-<N>` サフィックスで識別される。
 
-インデックス <N> と復号後のビルドモード名は 1:1 対応。以降の各種オプション要素は -<N> サフィックスで識別される。
+### 3.4 ビルド対象ソースリスト
 
-3.4 ビルド対象ソースリスト
-
+```xml
 <SourceItemGuid0>3c8caaf3-...</SourceItemGuid0>
-
 <SourceItemType0>AsmSource</SourceItemType0>
-
 <SourceItemGuid1>a4a26ac0-...</SourceItemGuid1>
-
 <SourceItemType1>CSource</SourceItemType1>
+```
 
-SourceItemGuid<N> の値集合が「ビルド対象ファイル GUID 集合」。
+- `SourceItemGuid<N>` の値集合が「ビルド対象ファイル GUID 集合」。
+- **現状の `.mtpj` ではソースリストは全ビルドモード共通**で保持されている。ファイル単位のビルド除外は本ツールでは対象外（制限事項として README に明記済み）。
+- ここに載らない `.h` 等は「登録されているがビルド対象外」として扱う。
 
-現状の .mtpj ではソースリストは全ビルドモード共通で保持されている。ファイル単位のビルド除外は本ツールでは対象外（制限事項として README に明記済み）。
+### 3.5 マクロ定義 / インクルードパス（プリプロセス機能で使用）
 
-ここに載らない .h 等は「登録されているがビルド対象外」として扱う。
+各ビルドモード index `<N>` に対し：
 
-3.5 マクロ定義 / インクルードパス（プリプロセス機能で使用）
-
-各ビルドモード index <N> に対し：
-
-
-
+```xml
 <COptionD-0>_USE_CCRL_RL78
-
 USE_VUART_PROFILE
-
 CFG_CON=1
-
 CFG_SECLIB_BOND_NUM=1
-
 </COptionD-0>
-
-
 
 <AsmOptionDefine-0 />
 
-
-
 <COptionIncludePath-0>...</COptionIncludePath-0>
+```
 
-COptionD-<N> : C コンパイラ -D 相当。改行区切り、NAME または NAME=VALUE。
+- `COptionD-<N>` : C コンパイラ `-D` 相当。改行区切り、`NAME` または `NAME=VALUE`。
+- `AsmOptionDefine-<N>` : アセンブラ向け `-D` 相当。同形式。
+- 値なし定義は `1` として扱う（プリプロセッサ慣例）。
+- 未定義識別子は `#if` 文脈で `0` に置換（C プリプロセッサ仕様通り）。
 
-AsmOptionDefine-<N> : アセンブラ向け -D 相当。同形式。
+---
 
-値なし定義は 1 として扱う（プリプロセッサ慣例）。
+## 4. 既存実装（保持すべき動作）
 
-未定義識別子は #if 文脈で 0 に置換（C プリプロセッサ仕様通り）。
+現行 `mtpj_deps.py`（リポジトリにコミット済み）は以下を実装済み：
 
-4. 既存実装（保持すべき動作）
+- `.mtpj` の XML パース（`xml.etree.ElementTree`、名前空間に頑健）
+- BuildMode 名の UTF-16LE+Base64 復号
+- ファイル/カテゴリ/ビルドモード/ソースリスト抽出
+- カテゴリパス再帰構築
+- 実ソースの `#include` 正規表現スキャン（`#include "..."` / `#include <...>` 両対応）
+- ベース名マッチで登録ファイルへの解決
+- 3セクション構成の Markdown 出力
+- `--list-modes` / `--no-scan` / `-m` / `-o`
 
-現行 mtpj_deps.py（リポジトリにコミット済み）は以下を実装済み：
+これらの動作は**維持**すること。拡張（5章）は追加機能として実装する。
 
+### 4.1 堅牢化要件（再実装時の必須事項）
 
+現行初版の挙動を再実装する際、以下は退行させず必ず確保すること。
 
-.mtpj の XML パース（xml.etree.ElementTree、名前空間に頑健）
+#### (a) ソースファイル読み込みの文字コード堅牢化
 
-BuildMode 名の UTF-16LE+Base64 復号
+CS+ が生成する `.c`/`.h` は CP932 で保存されていることが多いため、
+以下の順でフォールバック読み込みを行うこと：
 
-ファイル/カテゴリ/ビルドモード/ソースリスト抽出
+1. `utf-8` で読み込み試行
+2. 失敗時は `cp932` で再試行
+3. 失敗時は `shift_jis` で再試行
+4. すべて失敗した場合は `utf-8` + `errors='replace'` で強制読み込み
 
-カテゴリパス再帰構築
+`#include` 行自体は ASCII だが、日本語コメントを含むファイルで
+`UnicodeDecodeError` によるスクリプト停止を防ぐため必須。
 
-実ソースの #include 正規表現スキャン（#include "..." / #include <...> 両対応）
+#### (b) 物理行 → 論理行の連結（バックスラッシュ改行対応）
 
-ベース名マッチで登録ファイルへの解決
+ファイル読み込み直後、**`#include` スキャンおよび条件評価を行う前に**、
+バックスラッシュ改行（`\` 直後の LF または CRLF）を除去して論理行に連結する。
+これは C 標準の翻訳フェーズ2 相当の処理で、以下のようなケースを正しく扱うために必須：
 
-3セクション構成の Markdown 出力
-
---list-modes / --no-scan / -m / -o
-
-これらの動作は維持すること。拡張（5章）は追加機能として実装する。
-
-5. 追加機能：条件ディレクティブ評価（--preprocess）
-
-5.1 目的
-
-.mtpj の COptionD-<N> / AsmOptionDefine-<N> から得たマクロ集合を使い、
-
-各ソースファイルの 条件ディレクティブを評価して、非アクティブブロック内の #include を出力から除外する。
-
-再帰的な include 展開やマクロ本体の完全展開は行わない（スコープ外）。
-
-
-
-5.2 サポート範囲
-
-必ずサポートする条件ディレクティブ
-
-#if <expr>
-
-#ifdef NAME / #ifndef NAME
-
-#elif <expr>
-
-#else
-
+```c
+#if MacroA && MacroB\
+&& MacroC
+#include "FFFF.h"
 #endif
+```
 
-<expr> 内で必ずサポートする構文
+上記は `#if MacroA && MacroB && MacroC` として評価されること。
+`#include` や `#define` の継続行にも同様に適用する。
 
-defined(NAME) / defined NAME
+実装例：`text = re.sub(r'\\\r?\n', '', text)` を読み込み直後に一度適用。
 
-論理: &&, ||, !
+#### (c) `#include` 正規表現の許容範囲
 
-比較: ==, !=, <, <=, >, >=
+`#` と `include` の間の空白、および行頭インデントの空白を許容すること。
+具体的には `#  include "xxx.h"` や `  #include <yyy.h>` も拾えること。
 
-算術: +, -, *, /, %
+参考実装：`r'^\s*#\s*include\s*[<"]([^">]+)[">]'`（`re.MULTILINE`）
 
-ビット: &, |, ^, ~, <<, >>
+---
 
-括弧 ( )
+## 5. 追加機能：条件ディレクティブ評価（`--preprocess`）
 
-整数リテラル（10進・16進 0x...・8進 0...、サフィックス u/U/l/L は除去）
+### 5.1 目的
 
-識別子: 定義済みなら値、未定義なら 0
+`.mtpj` の `COptionD-<N>` / `AsmOptionDefine-<N>` から得たマクロ集合を使い、
+各ソースファイルの **条件ディレクティブを評価**して、
+**非アクティブブロック内の `#include` を出力から除外する**。
 
-必須テストケース（ユーザー要求）
+再帰的な include 展開やマクロ本体の完全展開は**行わない**（スコープ外）。
 
-定義済みマクロ: MacroA, MacroB（MacroC は未定義）
+### 5.2 サポート範囲
 
+#### 必ずサポートする条件ディレクティブ
+- `#if <expr>`
+- `#ifdef NAME` / `#ifndef NAME`
+- `#elif <expr>`
+- `#else`
+- `#endif`
 
+#### `<expr>` 内で必ずサポートする構文
+- `defined(NAME)` / `defined NAME`
+- 論理: `&&`, `||`, `!`
+- 比較: `==`, `!=`, `<`, `<=`, `>`, `>=`
+- 算術: `+`, `-`, `*`, `/`, `%`
+- ビット: `&`, `|`, `^`, `~`, `<<`, `>>`
+- 括弧 `( )`
+- 整数リテラル（10進・16進 `0x...`・8進 `0...`、サフィックス `u`/`U`/`l`/`L` は除去）
+- 識別子: 定義済みなら値、未定義なら `0`
 
+#### **必須テストケース（ユーザー要求）**
+
+定義済みマクロ: `MacroA`, `MacroB`（`MacroC` は未定義）
+
+```c
 #if MacroA && MacroB
-
-#include "DDDD.h" // ← アクティブ。出力に含める
-
+#include "DDDD.h"   // ← アクティブ。出力に含める
 #endif
-
-
 
 #if MacroA && MacroC
+#include "EEEE.h"   // ← 非アクティブ。出力から除外
+#endif
+```
 
-#include "EEEE.h" // ← 非アクティブ。出力から除外
+この例が `--preprocess` 有効時に正しく区別されること（自動テストで検証）。
+なお `&`（単一）・`&&`（論理）どちらで書かれても 0/1 フラグなら同一結果になるため、両方テストを含める。
 
+#### **必須テストケース（バックスラッシュ改行）**
+
+定義済みマクロ: `MacroA`, `MacroB`（`MacroC` は未定義）
+
+```c
+#if MacroA && MacroB\
+&& MacroC
+#include "FFFF.h"   // ← 非アクティブ。除外されること
 #endif
 
-この例が --preprocess 有効時に正しく区別されること（自動テストで検証）。
+#if MacroA && MacroB\
+&& MacroB
+#include "GGGG.h"   // ← アクティブ。含まれること
+#endif
+```
 
-なお &（単一）・&&（論理）どちらで書かれても 0/1 フラグなら同一結果になるため、両方テストを含める。
+論理行連結（4.1(b)）後に条件評価が行われ、上記が期待通りに区別されること。
 
+### 5.3 保守的フォールバック
 
+以下のケースは「判定不能 → **アクティブとみなす**（include を拾う）」
+という **False Negative 回避**方針をとる：
 
-5.3 保守的フォールバック
+- 関数形式マクロ使用（`#if FOO(1,2)`）
+- 他ファイルの `#define` に依存する識別子（解決不能）
+- パース/評価で例外発生
+- 未サポート構文（三項演算子 `? :` 等）
 
-以下のケースは「判定不能 → アクティブとみなす（include を拾う）」
+保守的判定を行った箇所は出力 Markdown に注記する（例：「1 件の `#if` を保守的にアクティブ扱いとした」）。
 
-という False Negative 回避方針をとる：
+### 5.4 実装指針
 
+#### (a) 条件式 → 評価可能形式への変換
 
+- 対応マッピング：`&&`→`and`, `||`→`or`, `!`→`not `, `defined(X)`→`(1 if 'X' in _defs else 0)`,
+  識別子→定義値 or `0`、整数リテラルのサフィックス `u/U/l/L/ul/UL/...` は除去。
+- **重要：単純な `str.replace` を使用しないこと**。以下の理由による：
+  - `!` → `not ` の単純置換は `!=` を `not =` に壊す
+  - `|` → `or` の単純置換は `||` や `|=` を破壊する
+  - サフィックス除去を無条件で行うと識別子 `FLAG_USB` が `FLAG_SB` に化ける
+- **正規表現による安全なトークン単位変換**を行うこと。具体策の例：
+  - 演算子は長いものから順にマッチ（`&&`, `||`, `!=`, `==`, `<=`, `>=` を先に、`!` `&` `|` を後に）
+  - 識別子は `\b[A-Za-z_][A-Za-z0-9_]*\b` で単語境界マッチ
+  - 数値リテラル内のサフィックスのみを `\b(0[xX][0-9a-fA-F]+|[0-9]+)[uUlL]+\b` でマッチして除去
+- あるいは C の条件式トークナイザを自前実装して、トークン列ベースで変換する方式も可（より堅牢）。
 
-関数形式マクロ使用（#if FOO(1,2)）
+#### (b) 式の評価 — `eval` は使用禁止
 
-他ファイルの #define に依存する識別子（解決不能）
+セキュリティ上の理由により、Python `eval` / `exec` / `compile` の
+動的実行系は**一切使用しないこと**。
 
-パース/評価で例外発生
+代わりに `ast.parse(expr, mode='eval')` で AST を生成し、
+**ホワイトリスト方式の AST Evaluator** を実装する。許可するノード：
 
-未サポート構文（三項演算子 ? : 等）
+| AST ノード | 用途 |
+|---|---|
+| `ast.Expression` | ルート |
+| `ast.Constant` (`int` のみ) / `ast.Num` (Py<3.8互換) | 数値リテラル |
+| `ast.Name` | 識別子（評価時に `_defs` 辞書から引く） |
+| `ast.BoolOp` | `and` / `or` |
+| `ast.UnaryOp` | `not` / `-` / `+` / `~` |
+| `ast.BinOp` | `+ - * / % & \| ^ << >>`（`Add`/`Sub`/`Mult`/`FloorDiv`/`Mod`/`BitAnd`/`BitOr`/`BitXor`/`LShift`/`RShift`） |
+| `ast.Compare` | `== != < <= > >=`（`Eq`/`NotEq`/`Lt`/`LtE`/`Gt`/`GtE`） |
 
-保守的判定を行った箇所は出力 Markdown に注記する（例：「1 件の #if を保守的にアクティブ扱いとした」）。
+上記以外のノード（`Call`, `Attribute`, `Subscript`, `Lambda`, `Import` 等）に
+遭遇した時点で例外を投げ、5.3 の保守的フォールバック（アクティブ扱い）に回すこと。
 
+未定義識別子は `ast.Name` の evaluator 内で `0` を返す。
 
+#### (c) ディレクティブ追跡
 
-5.4 実装指針
+`#if` / `#ifdef` / `#ifndef` / `#elif` / `#else` / `#endif` をスタックで追跡し、
+各ブロックに `active` / `inactive` / `skip`（親が非アクティブ）の状態を持たせる。
+`#include` は**アクティブなブロック内のもののみ**採用。
 
-条件式 → Python 式への変換：&&→and, ||→or, !→not , defined(X)→(1 if 'X' in _defs else 0), 識別子→値 or 0
+なお 4.1(b) の論理行連結は、ディレクティブ解析**より前**に適用済みであること。
 
-制限された namespace（__builtins__: {}）で eval
+### 5.5 CC-RL 組み込みマクロ allow-list
 
-#if/#elif/#else/#endif をスタックで追跡。各ブロックに「active/inactive/skip(親が非アクティブ)」状態を持たせる
+`.mtpj` に載らないコンパイラ組み込みマクロを外部 JSON で持つ。
 
-include 行はアクティブなブロック内のもののみ採用
+**ファイル名**: `ccrl_builtins.json`（`mtpj_deps.py` と同階層に配置。存在しなければ空辞書扱い）
 
-式評価はファイル単位。#define による動的なマクロ追加は追わない（スコープ外）
-
-5.5 CC-RL 組み込みマクロ allow-list
-
-.mtpj に載らないコンパイラ組み込みマクロを外部 JSON で持つ。
-
-ファイル名: ccrl_builtins.json（mtpj_deps.py と同階層に配置。存在しなければ空辞書扱い）
-
-形式:
-
-
-
+**形式**:
+```json
 {
-
-"__CCRL__": "1",
-
-"__RL78__": "1",
-
-"__K0R__": "1",
-
-"__RENESAS__": "1",
-
-"__RENESAS_VERSION__": "0x01000000"
-
+  "__CCRL__": "1",
+  "__RL78__": "1",
+  "__K0R__": "1",
+  "__RENESAS__": "1",
+  "__RENESAS_VERSION__": "0x01000000"
 }
+```
 
-利用者が自プロジェクトの CC-RL バージョンに合わせて編集できる。
+- 利用者が自プロジェクトの CC-RL バージョンに合わせて編集できる。
+- `--preprocess` 有効時、`COptionD-<N>` / `AsmOptionDefine-<N>` の内容に**マージ**して評価用マクロ辞書を作る。優先順は `.mtpj` の値 > 組み込み（同名キーは `.mtpj` を優先）。
 
---preprocess 有効時、COptionD-<N> / AsmOptionDefine-<N> の内容にマージして評価用マクロ辞書を作る。優先順は .mtpj の値 > 組み込み（同名キーは .mtpj を優先）。
+### 5.6 出力の変更点
 
-5.6 出力の変更点
+`--preprocess` 有効時、Markdown に以下を追加：
 
---preprocess 有効時、Markdown に以下を追加：
+- セクション 1 の直下に **「Active defines (build-mode macros)」** サブセクション
+  - `COptionD-<N>` 由来と組み込み由来を区別して列挙
+- セクション 2 の見出しに `(preprocessed)` を付記
+- セクション 3 の末尾に「Preprocessing notes」を追加
+  - 保守的にアクティブ扱いとした `#if` の件数
+  - スキャン対象ファイル数 / 評価成功ファイル数
 
+`--preprocess` 未指定時の出力は現行と完全互換であること。
 
+---
 
-セクション 1 の直下に 「Active defines (build-mode macros)」 サブセクションCOptionD-<N> 由来と組み込み由来を区別して列挙
+## 6. 制限事項（README に記載すること）
 
-セクション 2 の見出しに (preprocessed) を付記
+1. **ファイル単位のビルド除外**: CS+ のファイルプロパティによるビルドモード別ファイル除外は未サポート。全ビルドモード共通ソースリストとして扱う。
+2. **マクロの完全展開**: `--preprocess` 有効時も、`#include` ファイル側の `#define` は追わない。`COptionD` と組み込みマクロのみで評価。
+3. **再帰的 include 展開**: 行わない（Copilot 用途では過剰）。
+4. **同名ファイル**: 異なるフォルダに同名ファイルがある場合、`#include` の解決はベース名一致のため複数候補が列挙される。
+5. **システムヘッダ**: `<stdint.h>` 等は未解決のまま表示（解決不要）。
 
-セクション 3 の末尾に「Preprocessing notes」を追加保守的にアクティブ扱いとした #if の件数
+---
 
-スキャン対象ファイル数 / 評価成功ファイル数
+## 7. 成果物一覧
+
+Claude Code に実装してもらう成果物：
+
+| ファイル | 内容 |
+|---|---|
+| `mtpj_deps.py` | 本体。現行機能 + `--preprocess` 拡張 |
+| `ccrl_builtins.json` | CC-RL 組み込みマクロ allow-list（最低限のサンプル同梱） |
+| `README.md` | 利用者向けドキュメント。推奨運用は `.mtpj` + `-m` 明示指定 |
+| `tests/test_mtpj_deps.py` | 自動テスト（pytest）。5.2 の必須ケース含む |
+| `tests/fixtures/` | テスト用ミニ `.mtpj` + ソース群 |
+
+### 7.1 テスト要件
+
+- 添付プロジェクト `RL78G14_Fast_Prototyping_Board_HostSample.mtpj` 相当の構造を持つ fixture を用意
+- `MacroA && MacroB` / `MacroA && MacroC` の分岐テスト（`&&` と `&` の両方）
+- **バックスラッシュ改行を含む `#if` 式のテスト**（5.2 の FFFF/GGGG 例）
+- UTF-16LE+Base64 の BuildMode 復号テスト
+- `--no-scan` / `--preprocess` / 未指定の3パターンで出力差分テスト
+- 不正な `.mtpj`（壊れた XML、存在しないモード名）のエラーハンドリング
+- 組み込みマクロ JSON が無い場合でも動作すること
+- **CP932 で保存された `.c` ファイル**（日本語コメント入り）が `UnicodeDecodeError` を起こさず読めること
+- **AST Evaluator 単体テスト**：許可されていないノード（例：`os.system` への参照、属性アクセス、関数呼び出し）を含む式を入力した際に、例外がキャッチされて保守的にアクティブ扱いになること
+- **`str.replace` 落とし穴テスト**：`!=`、`FLAG_USB` のような識別子、`0x1UL` のようなサフィックス付きリテラルが破壊されず正しく評価されること
+
+### 7.2 コーディング方針
+
+- Python 3.7+ 標準ライブラリのみ（追加依存禁止）
+- 型ヒント付与（`from __future__ import annotations` 可）
+- docstring は日本語可
+- CLI エラーは `sys.exit(...)` でメッセージ付き終了
+- Windows / macOS / Linux で動作すること（パス区切り注意）
+
+---
+
+## 8. 運用シナリオ（README に反映）
+
+### 基本フロー
+
+```bash
+# 1. ビルドモード一覧を確認
+python mtpj_deps.py ./proj/Sample.mtpj --list-modes
+
+# 2. ビルドモードを明示して生成（推奨運用）
+python mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild \
+    -o .github/copilot-project-structure.md
+
+# 3. プリプロセスを有効にして、非アクティブ include を除外
+python mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild --preprocess \
+    -o .github/copilot-project-structure.md
+```
+
+### CI 連携例（GitHub Actions）
+
+```yaml
+- name: Regenerate Copilot project structure
+  run: |
+    python mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild --preprocess \
+      -o .github/copilot-project-structure.md
+```
+
+### `.github/copilot-instructions.md` からの参照例
+
+```markdown
+## Project structure reference
+
+See [`copilot-project-structure.md`](./copilot-project-structure.md) for:
+- registered source/header files,
+- build participation for `DefaultBuild` (marked `[B]`),
+- active macro definitions and per-file `#include` dependencies
+  (preprocessed for this build mode).
+
+When proposing changes:
+- Only modify files marked `[B]` or headers they include.
+- Keep `#include` paths consistent with the dependency list.
+- Do not add new source files without also registering them in the `.mtpj`.
+```
+
+---
+
+## 9. 会話履歴サマリ（Claude Code 向け補足）
+
+本仕様は以下の経緯で確定：
+
+1. 初期要件: `.mtpj` からビルドモード別の依存情報を Markdown で出力（`copilot-instructions.md` から参照する目的）
+2. 初版実装: カテゴリ別ファイル一覧 + `[B]` マーク + `#include` 正規表現スキャンを実現
+3. 運用方針確認: **`.mtpj` とビルドモードの明示指定を推奨**（`CurrentBuildMode` 依存は結果が環境依存になるため）
+4. 拡張要望: `COptionD-<N>` のマクロで `#if/#ifdef` を評価し、非アクティブ include を除外したい
+5. スコープ確定:
+   - `#include` 行の active/inactive 判定のみ行う（再帰展開・完全マクロ展開はしない）
+   - 複合条件 `MacroA && MacroB` 等は必須サポート
+   - 判定不能は保守的にアクティブ扱い
+   - 組み込みマクロは外部 JSON で差し替え可能
+6. 堅牢化要件の追加（最終レビュー）:
+   - バックスラッシュ改行（論理行連結）を必須サポート
+   - 条件式変換は `str.replace` 禁止、正規表現/トークン単位で行う
+   - 式評価は `eval` 禁止、`ast.parse` + ホワイトリスト AST Evaluator
+   - ソース読み込みは UTF-8 → CP932 → Shift_JIS → `errors='replace'` フォールバック
+   - `#include` 正規表現は `#  include` のような空白混在を許容（現行既対応、明文化）
+
+この仕様で実装を進めてください。
