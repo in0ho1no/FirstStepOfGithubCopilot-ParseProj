@@ -1,0 +1,184 @@
+
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+.markdown-preview.markdown-preview {
+  background-color: #f0f0f0;
+
+  body {
+    color: #494949;
+  }
+
+  pre {
+    color: #f4f4f4;
+    background-color: #494949;
+    padding: 0.3em;
+  }
+
+  blockquote {
+    border-color: #AB3E67;
+  }
+
+  h1 {
+    color: #494949;
+    font-weight: bold;
+    padding: 0.3em;
+    border: solid 3px #199aea;
+    border-radius: 0.3em;
+      counter-reset: chapter;
+  }
+
+  h2 {
+    color: #494949;
+    position: relative;
+    font-weight: bold;
+    margin-top: 0.0em;  margin-bottom: 0.5em; margin-left: 0.0em;  margin-right: 0.0em;
+    padding-top: 0.5em; padding-bottom: 0.1em;  padding-left: 0.0em;  padding-right: 0.5em;
+    border-bottom: 2px solid #199aea;
+      counter-reset: sub-chapter;
+  }
+
+  h3 {
+    color: #494949;
+    background-color: #f4f4f4;
+    padding-top: 0.3em; padding-bottom: 0.3em;  padding-left: 0.5em;  padding-right: 0.0em;
+    border-left: 6px solid #199aea;
+      counter-reset: section;
+  }
+
+  h4 {
+    color: #494949;
+    background-color: #f4f4f4;
+    padding-top: 0.3em; padding-bottom: 0.3em;  padding-left: 0.5em;  padding-right: 0.0em;
+    border-left: 2px solid #199aea;
+    border-radius: 6px;
+      counter-reset: sub-section;
+  }
+
+  h5 {
+    color: #494949;
+    padding-top: 0.3em; padding-bottom: 0.0em;  padding-left: 0.7em;  padding-right: 0.0em;
+    border-bottom-style: dotted;
+    border-bottom-color: #199aea;
+    border-bottom-width:thin;
+      counter-reset: sub-sub-section;
+  }
+  
+  h2:before{
+      counter-increment: chapter;
+      content: counter(chapter) ". ";
+  }
+  
+  h3:before{
+      counter-increment: sub-chapter;
+      content: counter(chapter) "." counter(sub-chapter) ". ";
+  }
+  
+  h4:before{
+      counter-increment: section;
+      content: counter(chapter) "." counter(sub-chapter) "." counter(section) ". ";
+  }
+  
+  h5:before{
+      counter-increment: sub-section;
+      content: counter(chapter) "." counter(sub-chapter) "." counter(section) "." counter(sub-section) ".";
+  }
+
+  table thead th {
+    background: #199aea;
+    font-weight: bold;
+    vertical-align: top;
+    color: #fff;
+  }
+  table th,
+  table td {
+    padding: 6px 13px;
+    border: 1px solid #ddd;
+  }
+  table tr {
+    background-color: #fff;
+    border-top: 1px solid #ccc;
+  }
+  table tr:nth-child(2n) {
+    background-color: #f8f8f8;
+  }
+
+  hr {
+    background-color: #f4f4f4;
+    border-top: 2px dashed #199aea;
+  }
+  
+  a {
+    color: #293dc2;
+    text-decoration: none;
+  }
+  a:hover,
+  a:active {
+    text-decoration: underline;
+  }
+
+  /* 画像を中央に配置する */
+  img[src*='#center'] { 
+      display: block;
+      margin: auto;
+  }
+
+  img[src*='#right'] { 
+      display: block;
+      float: right;
+  }
+
+  #note {
+    color: #38225d;
+    background-color: #e2daf1;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #tip {
+    color: #094409;
+    background-color: #d2f9d2;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #info {
+    color: #002b4d;
+    background-color: #e0f2ff;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #warning {
+    color: #651b01;
+    background-color: #ffdacc;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #caution {
+    color: #664b00;
+    background-color: #fff1cc;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #sample {
+    color: #82362D;
+    background-color: #7DC9D2;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  #result {
+    color: #E6DDDD;
+    background-color: #192222;
+    padding: 0.3em;
+    border-radius: 0.3em;
+  }
+
+  .image_w300 {
+    width: 300px;
+    height: auto;
+  }
+}

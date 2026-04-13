@@ -1,0 +1,44 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+	"settings": {
+		// ミニマップを非表示にする
+		"editor.minimap.enabled": false,
+		// カラーカスタマイズ
+		"workbench.colorCustomizations": {
+			"activityBar.background": "#e2df16b4",
+			"activityBar.foreground": "#06065df5",
+		},
+
+		// フォント設定
+		"editor.fontFamily": "Consolas, 'Meiryo UI','Courier New', monospace",
+
+		// markdown settings
+		"[markdown]": {
+			"editor.wordWrap":"on",
+			"editor.wordSeparators": "./\\()\"'-:,.;<>~!@# ○$%^&*|+=[]{}`~?．。，、（）「」［］｛｝《》『』【】てにをはがのともへでや",
+			"editor.quickSuggestions": {
+				"other": true,
+				"comments": false,
+				"strings": false
+			},
+			"editor.snippetSuggestions": "top",
+			"editor.scrollBeyondLastLine": false,
+			"editor.padding.bottom": 250,
+		},
+
+		// 画像コピペ時の保存先指定
+		"markdown.copyFiles.destination": {
+			"**/*": "img/"
+		},
+		
+		// Markdown Preview Enhanced
+		"markdown-preview-enhanced.breakOnSingleNewLine": false,
+		"markdown-preview-enhanced.scrollSync": false,
+		"markdown-preview-enhanced.mathRenderingOption": "MathJax",
+		"markdown-preview-enhanced.automaticallyShowPreviewOfMarkdownBeingEdited": true,
+	}
+}
