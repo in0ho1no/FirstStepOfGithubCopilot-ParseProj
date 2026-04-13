@@ -74,6 +74,10 @@ uv run pytest src/tests/
 - 関数には型ヒントを付与する（mypy: `disallow_untyped_defs = true`）
 - docstring は Google スタイル
 
+## コミュニケーション規則
+
+- 絵文字（✅ / ❌ / 🔧 等）はファイル・コメント・応答のいずれにも使用しない
+
 ## OSS ライセンスポリシー
 
 本プロジェクトのコードに OSS ライセンス汚染を持ち込まないこと。

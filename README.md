@@ -33,7 +33,7 @@ uv run src/mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild --preprocess \
 
 | オプション          | 必須 | 説明 |
 |---------------------|------|------|
-| `<project.mtpj>`    | ✅   | 解析対象の .mtpj パス |
+| `<project.mtpj>`    | 必須 | 解析対象の .mtpj パス |
 | `-m`, `--mode MODE` | 推奨 | 対象ビルドモード名。省略時は `CurrentBuildMode` |
 | `-o`, `--out PATH`  | 任意 | 出力先。省略時は `<mtpj名>_<mode>_deps.md` |
 | `--no-scan`         | 任意 | `#include` スキャンをスキップ |
