@@ -40,5 +40,13 @@
 		"markdown-preview-enhanced.scrollSync": false,
 		"markdown-preview-enhanced.mathRenderingOption": "MathJax",
 		"markdown-preview-enhanced.automaticallyShowPreviewOfMarkdownBeingEdited": true,
+
+		"editor.defaultFormatter": "charliermarsh.ruff",
+		"editor.formatOnSave": true,
+		"editor.codeActionsOnSave": {
+			"source.fixAll": "explicit",
+		},
+		
+		"autoDocstring.docstringFormat": "google",
 	}
 }
