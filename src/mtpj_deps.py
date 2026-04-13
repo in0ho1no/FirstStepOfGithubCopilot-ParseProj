@@ -18,6 +18,9 @@ import xml.etree.ElementTree as ET
 ENCODING_FALLBACKS = ['utf-8', 'cp932', 'shift_jis']
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^">]+)[">]', re.MULTILINE)
 
+# .mtpj ファイルの最大許容サイズ（DoS 軽減: 10 MB）
+_MAX_MTPJ_BYTES = 10 * 1024 * 1024
+
 # ---------------------------------------------------------------------------
 # データクラス
 # ---------------------------------------------------------------------------
@@ -116,6 +119,19 @@ def decode_build_mode(b64: str) -> str:
     return raw.decode('utf-16-le').rstrip('\x00')
 
 
+def _is_within_base(base_dir: Path, rel_path: str) -> bool:
+    """
+    rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
+    パストラバーサル（../../../ 等）を防ぐために使用する。
+    """
+    try:
+        resolved = (base_dir / rel_path).resolve()
+        resolved.relative_to(base_dir.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 # ---------------------------------------------------------------------------
 # .mtpj パーサ
 # ---------------------------------------------------------------------------
@@ -154,6 +170,10 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
 
     if not mtpj_path.exists():
         sys.exit(f'[ERROR] ファイルが見つかりません: {mtpj_path}')
+
+    file_size = mtpj_path.stat().st_size
+    if file_size > _MAX_MTPJ_BYTES:
+        sys.exit(f'[ERROR] .mtpj ファイルが大きすぎます ({file_size:,} bytes)。上限: {_MAX_MTPJ_BYTES:,} bytes')
 
     try:
         tree = ET.parse(mtpj_path)
@@ -220,9 +240,9 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
     for inst in instances:
         # BuildModeCount があれば BuildTool Instance
         bmc_elem = None
-        for child in inst:
-            if local(child.tag) == 'BuildModeCount':
-                bmc_elem = child
+        for elem in inst.iter():
+            if local(elem.tag) == 'BuildModeCount':
+                bmc_elem = elem
                 break
         if bmc_elem is None:
             continue
@@ -235,9 +255,9 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
 
         modes: list[str] = []
         for idx in range(count):
-            for child in inst:
-                if local(child.tag) == f'BuildMode{idx}':
-                    raw_b64 = (child.text or '').strip()
+            for elem in inst.iter():
+                if local(elem.tag) == f'BuildMode{idx}':
+                    raw_b64 = (elem.text or '').strip()
                     try:
                         modes.append(decode_build_mode(raw_b64))
                     except Exception:
@@ -248,37 +268,39 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
 
         # CurrentBuildMode
         proj.current_build_mode = ''
-        for child in inst:
-            if local(child.tag) == 'CurrentBuildMode':
-                proj.current_build_mode = (child.text or '').strip()
+        for elem in inst.iter():
+            if local(elem.tag) == 'CurrentBuildMode':
+                proj.current_build_mode = (elem.text or '').strip()
                 break
 
         # ソースリスト（SourceItemGuid<N>）
+        # BuildTool Instance 内のどの階層にあっても拾えるよう iter() で再帰検索する
         src_guids: set[str] = set()
-        for child in inst:
-            tag = local(child.tag)
+        for elem in inst.iter():
+            tag = local(elem.tag)
             if tag.startswith('SourceItemGuid'):
-                val = (child.text or '').strip()
+                val = (elem.text or '').strip()
                 if val:
                     src_guids.add(val)
         proj.build_target_guids = src_guids
 
         # マクロ・インクルードパス（COptionD-<N>, AsmOptionDefine-<N>）
+        # 同様に再帰検索する
         for idx in range(count):
             macros: dict[str, str] = {}
-            for child in inst:
-                tag = local(child.tag)
+            for elem in inst.iter():
+                tag = local(elem.tag)
                 if tag in (f'COptionD-{idx}', f'AsmOptionDefine-{idx}'):
-                    raw = (child.text or '').strip()
+                    raw = (elem.text or '').strip()
                     if raw:
                         macros.update(_parse_macros(raw))
             proj.macros_by_mode_index[idx] = macros
 
             inc_paths: list[str] = []
-            for child in inst:
-                tag = local(child.tag)
+            for elem in inst.iter():
+                tag = local(elem.tag)
                 if tag == f'COptionIncludePath-{idx}':
-                    raw = (child.text or '').strip()
+                    raw = (elem.text or '').strip()
                     if raw:
                         inc_paths = [p.strip() for p in raw.splitlines() if p.strip()]
                     break
@@ -732,6 +754,9 @@ def generate_markdown(
         scan_entries = [fe for fe in proj.files.values() if fe.is_build_target]
 
         for fe in sorted(scan_entries, key=lambda x: x.rel_path):
+            if not _is_within_base(mtpj_dir, fe.rel_path):
+                print(f'[WARN] プロジェクト外パスをスキップ: {fe.rel_path}', file=sys.stderr)
+                continue
             src_path = mtpj_dir / fe.rel_path
             scan = scan_includes(src_path, use_preprocess, eval_defs)
             if scan is None:
