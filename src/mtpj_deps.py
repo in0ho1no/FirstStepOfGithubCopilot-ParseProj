@@ -680,7 +680,7 @@ def generate_markdown(
                 lines.append(f'- `{k}` = `{v}`')
             lines.append('')
         if builtin_macros:
-            lines.append('**From `ccrl_builtins.json` (compiler built-ins):**')
+            lines.append('**From `compiler_builtins.json` (compiler built-ins):**')
             lines.append('')
             for k, v in sorted(builtin_macros.items()):
                 lines.append(f'- `{k}` = `{v}`')
@@ -791,8 +791,8 @@ def generate_markdown(
 # CLI エントリポイント
 # ---------------------------------------------------------------------------
 def load_builtin_macros(script_dir: Path) -> dict[str, str]:
-    """ccrl_builtins.json を読み込む。存在しなければ空辞書。"""
-    json_path = script_dir / 'ccrl_builtins.json'
+    """compiler_builtins.json を読み込む。存在しなければ空辞書。"""
+    json_path = script_dir / 'compiler_builtins.json'
     if not json_path.exists():
         return {}
     try:

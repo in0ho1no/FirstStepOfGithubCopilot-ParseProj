@@ -56,11 +56,13 @@ uv run src/mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild --preprocess \
 - Section 2 見出しに `(preprocessed)` 付記
 - Section 3 末尾に **「Preprocessing notes」**（保守的フォールバック件数等）
 
-## CC-RL 組み込みマクロ (`ccrl_builtins.json`)
+## コンパイラ組み込みマクロ (`compiler_builtins.json`)
 
-`src/ccrl_builtins.json` にコンパイラ組み込みマクロを定義できます。
+`src/compiler_builtins.json` にコンパイラ組み込みマクロを定義できます。
 `--preprocess` 有効時に `.mtpj` の `COptionD` とマージして評価に使用されます。
-優先順は `.mtpj` > `ccrl_builtins.json`（同名キーは `.mtpj` が優先）。
+優先順は `.mtpj` > `compiler_builtins.json`（同名キーは `.mtpj` が優先）。
+
+使用するコンパイラに合わせて編集してください。以下は CC-RL 向けのサンプルです：
 
 ```json
 {
@@ -71,8 +73,6 @@ uv run src/mtpj_deps.py ./proj/Sample.mtpj -m DefaultBuild --preprocess \
   "__RENESAS_VERSION__": "0x01000000"
 }
 ```
-
-CC-RL バージョンに合わせて編集してください。
 
 ## CI 連携例（GitHub Actions）
 

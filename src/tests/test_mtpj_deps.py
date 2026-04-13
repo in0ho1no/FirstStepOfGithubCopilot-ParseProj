@@ -447,7 +447,7 @@ class TestOutputVariants:
 # ---------------------------------------------------------------------------
 class TestBuiltinMacrosMissing:
     def test_works_without_json(self) -> None:
-        """ccrl_builtins.json が無くても動作する。"""
+        """compiler_builtins.json が無くても動作する。"""
         proj = parse_mtpj(FIXTURES / 'sample.mtpj')
         md = generate_markdown(
             proj=proj,
