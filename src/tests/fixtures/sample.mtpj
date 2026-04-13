@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CubeSuiteProject>
+  <SchemaVersion>2.1</SchemaVersion>
+  <Instances>
+
+    <!-- カテゴリ: ルート -->
+    <Instance Guid="root-cat-0001">
+      <n>Sources</n>
+      <Type>Category</Type>
+      <ParentItem></ParentItem>
+    </Instance>
+
+    <!-- カテゴリ: Sources / Generated -->
+    <Instance Guid="sub-cat-0001">
+      <n>Generated</n>
+      <Type>Category</Type>
+      <ParentItem>root-cat-0001</ParentItem>
+    </Instance>
+
+    <!-- カテゴリ: Headers -->
+    <Instance Guid="root-cat-0002">
+      <n>Headers</n>
+      <Type>Category</Type>
+      <ParentItem></ParentItem>
+    </Instance>
+
+    <!-- ファイル: r_main.c -->
+    <Instance Guid="file-guid-0001">
+      <n>r_main.c</n>
+      <Type>File</Type>
+      <RelativePath>r_main.c</RelativePath>
+      <ParentItem>root-cat-0001</ParentItem>
+    </Instance>
+
+    <!-- ファイル: r_sub.c (Generated カテゴリ) -->
+    <Instance Guid="file-guid-0002">
+      <n>r_sub.c</n>
+      <Type>File</Type>
+      <RelativePath>r_sub.c</RelativePath>
+      <ParentItem>sub-cat-0001</ParentItem>
+    </Instance>
+
+    <!-- ファイル: r_main.h (Headers、ビルド対象外) -->
+    <Instance Guid="file-guid-0003">
+      <n>r_main.h</n>
+      <Type>File</Type>
+      <RelativePath>r_main.h</RelativePath>
+      <ParentItem>root-cat-0002</ParentItem>
+    </Instance>
+
+    <!-- ファイル: r_config.h (Headers、ビルド対象外) -->
+    <Instance Guid="file-guid-0004">
+      <n>r_config.h</n>
+      <Type>File</Type>
+      <RelativePath>r_config.h</RelativePath>
+      <ParentItem>root-cat-0002</ParentItem>
+    </Instance>
+
+    <!-- BuildTool Instance -->
+    <Instance Guid="build-tool-guid-0001">
+      <n>CC-RL</n>
+      <Type>BuildTool</Type>
+
+      <BuildModeCount>3</BuildModeCount>
+      <BuildMode0>RABlAGYAYQB1AGwAdABCAHUAaQBsAGQA</BuildMode0>
+      <BuildMode1>UgBlAGwAZQBhAHMAZQBNAG8AZABlAA==</BuildMode1>
+      <BuildMode2>RABlAGIAdQBnAE0AbwBkAGUA</BuildMode2>
+      <CurrentBuildMode>DefaultBuild</CurrentBuildMode>
+
+      <!-- ソースリスト (DefaultBuild) -->
+      <SourceItemGuid0>file-guid-0001</SourceItemGuid0>
+      <SourceItemType0>CSource</SourceItemType0>
+      <SourceItemGuid1>file-guid-0002</SourceItemGuid1>
+      <SourceItemType1>CSource</SourceItemType1>
+
+      <!-- マクロ定義 (DefaultBuild = index 0) -->
+      <COptionD-0>MacroA
+MacroB
+CFG_CON=1
+CFG_VER=0x0100
+</COptionD-0>
+      <AsmOptionDefine-0 />
+      <COptionIncludePath-0>src</COptionIncludePath-0>
+
+      <!-- マクロ定義 (ReleaseMode = index 1) -->
+      <COptionD-1>MacroA
+RELEASE_BUILD=1
+</COptionD-1>
+      <AsmOptionDefine-1 />
+
+      <!-- マクロ定義 (DebugMode = index 2) -->
+      <COptionD-2>DEBUG_BUILD=1
+</COptionD-2>
+      <AsmOptionDefine-2 />
+
+    </Instance>
+
+  </Instances>
+</CubeSuiteProject>

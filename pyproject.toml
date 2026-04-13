@@ -91,3 +91,8 @@ ignore_missing_imports = true
 exclude = [
     "docs/source/conf\\.py$", # . はエスケープ
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
