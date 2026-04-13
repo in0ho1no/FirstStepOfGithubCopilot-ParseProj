@@ -248,6 +248,7 @@ int x = 1; // #include "x.h"    ← 拾ってはいけない
 ### 5.2 サポート範囲
 
 #### 必ずサポートする条件ディレクティブ
+
 - `#if <expr>`
 - `#ifdef NAME` / `#ifndef NAME`
 - `#elif <expr>`
@@ -255,6 +256,7 @@ int x = 1; // #include "x.h"    ← 拾ってはいけない
 - `#endif`
 
 #### `<expr>` 内で必ずサポートする構文
+
 - `defined(NAME)` / `defined NAME`
 - 論理: `&&`, `||`, `!`
 - 比較: `==`, `!=`, `<`, `<=`, `>`, `>=`
