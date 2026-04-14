@@ -1,2 +1,16 @@
+# documents
 /documents/*.html
 /documents/*.pdf
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
+# 型チェックキャッシュ
+.mypy_cache/
+
+# 仮想環境
+.venv/
+
+# pytest キャッシュ
+.pytest_cache/
