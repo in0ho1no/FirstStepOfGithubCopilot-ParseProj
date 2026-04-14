@@ -209,8 +209,17 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
     raw_items: dict[str, dict] = {}
     for inst in instances:
         guid = inst.get('Guid', '')
+        if not guid:
+            continue
         item_type = find_text(inst, 'Type')
-        name = find_text(inst, 'n')
+        # CS+ RX系では同一 GUID の Instance が複数存在する場合がある。
+        # 後から現れるビルド設定専用 Instance（Type が空）で
+        # File / Category エントリを上書きしないよう保護する。
+        existing = raw_items.get(guid)
+        if existing and existing['type'] in ('File', 'Category') and item_type not in ('File', 'Category'):
+            continue
+        # 名前タグは CS+ RL78 系では <n>、RX 系では <Name> を使う
+        name = find_text(inst, 'n') or find_text(inst, 'Name')
         rel_path = find_text(inst, 'RelativePath').replace('\\', '/')
         parent = find_text(inst, 'ParentItem')
         raw_items[guid] = {
