@@ -188,9 +188,16 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         return tag.split('}', 1)[-1] if '}' in tag else tag
 
     def find_text(elem: ET.Element, tag: str) -> str:
+        """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。"""
         for child in elem:
-            if local(child.tag) == tag:
+            child_local = local(child.tag)
+            if child_local == 'Instance':
+                continue  # ネストした Instance を越えない
+            if child_local == tag:
                 return (child.text or '').strip()
+            result = find_text(child, tag)
+            if result:
+                return result
         return ''
 
     instances: list[ET.Element] = []
