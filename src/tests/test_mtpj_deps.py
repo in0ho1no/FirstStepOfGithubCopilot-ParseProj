@@ -99,6 +99,34 @@ class TestParseMtpj:
 
 
 # ---------------------------------------------------------------------------
+# セキュリティテスト
+# ---------------------------------------------------------------------------
+class TestSecurity:
+    def test_path_traversal_blocked(self) -> None:
+        """../../../ のようなパスはスキャン対象から除外される。"""
+        from mtpj_deps import _is_within_base
+        base = Path('/some/project')
+        assert _is_within_base(base, '../outside.c') is False
+        assert _is_within_base(base, '../../etc/passwd') is False
+        assert _is_within_base(base, 'src/main.c') is True
+        assert _is_within_base(base, 'sub/dir/file.c') is True
+
+    def test_absolute_path_blocked(self) -> None:
+        """絶対パスはプロジェクト外とみなしてブロックされる。"""
+        from mtpj_deps import _is_within_base
+        base = Path('D:/project') if sys.platform == 'win32' else Path('/project')
+        assert _is_within_base(base, '/etc/passwd') is False
+
+    def test_oversized_mtpj_rejected(self, tmp_path: Path) -> None:
+        """上限を超えるファイルサイズは sys.exit する。"""
+        from mtpj_deps import _MAX_MTPJ_BYTES
+        large = tmp_path / 'large.mtpj'
+        large.write_bytes(b'x' * (_MAX_MTPJ_BYTES + 1))
+        with pytest.raises(SystemExit):
+            parse_mtpj(large)
+
+
+# ---------------------------------------------------------------------------
 # バックスラッシュ改行（論理行連結）テスト
 # ---------------------------------------------------------------------------
 class TestJoinContinuationLines:
@@ -447,7 +475,7 @@ class TestOutputVariants:
 # ---------------------------------------------------------------------------
 class TestBuiltinMacrosMissing:
     def test_works_without_json(self) -> None:
-        """ccrl_builtins.json が無くても動作する。"""
+        """compiler_builtins.json が無くても動作する。"""
         proj = parse_mtpj(FIXTURES / 'sample.mtpj')
         md = generate_markdown(
             proj=proj,
