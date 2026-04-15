@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CubeSuiteProject>
+  <ProductVersion>7.00.00.00</ProductVersion>
+  <Class Guid="68f4a651-b9cd-473b-a595-b00447132ffa">
+    <Instance Guid="00000000-0000-0000-0000-000000000000">
+      <FormatVersion>2.0</FormatVersion>
+      <FileVersion>7.0</FileVersion>
+      <ProjectGuid>aaaaaaaa-0000-0000-0000-000000000001</ProjectGuid>
+      <ProjectItemGuid>aaaaaaaa-0000-0000-0000-000000000002</ProjectItemGuid>
+      <FileCategoryGuid>aaaaaaaa-0000-0000-0000-000000000003</FileCategoryGuid>
+    </Instance>
+
+    <!-- カテゴリ: Sources -->
+    <Instance Guid="rx-cat-0001">
+      <Name>Sources</Name>
+      <Type>Category</Type>
+      <ParentItem>aaaaaaaa-0000-0000-0000-000000000003</ParentItem>
+    </Instance>
+
+    <!-- カテゴリ: Headers -->
+    <Instance Guid="rx-cat-0002">
+      <Name>Headers</Name>
+      <Type>Category</Type>
+      <ParentItem>aaaaaaaa-0000-0000-0000-000000000003</ParentItem>
+    </Instance>
+
+    <!-- ファイル: rx_main.c -->
+    <Instance Guid="rx-file-0001">
+      <Name>rx_main.c</Name>
+      <Type>File</Type>
+      <RelativePath>src\rx_main.c</RelativePath>
+      <ParentItem>rx-cat-0001</ParentItem>
+    </Instance>
+
+    <!-- ファイル: rx_sub.c -->
+    <Instance Guid="rx-file-0002">
+      <Name>rx_sub.c</Name>
+      <Type>File</Type>
+      <RelativePath>src\rx_sub.c</RelativePath>
+      <ParentItem>rx-cat-0001</ParentItem>
+    </Instance>
+
+    <!-- ファイル: rx_main.h (ビルド対象外) -->
+    <Instance Guid="rx-file-0003">
+      <Name>rx_main.h</Name>
+      <Type>File</Type>
+      <RelativePath>src\rx_main.h</RelativePath>
+      <ParentItem>rx-cat-0002</ParentItem>
+    </Instance>
+
+    <!-- BuildTool Instance (CC-RX形式) -->
+    <Instance Guid="rx-build-tool-0001">
+      <Name>CC-RX</Name>
+      <Type>BuildTool</Type>
+
+      <BuildModeCount>2</BuildModeCount>
+      <BuildMode0>RABlAGYAYQB1AGwAdABCAHUAaQBsAGQA</BuildMode0>
+      <BuildMode1>UgBlAGwAZQBhAHMAZQBNAG8AZABlAA==</BuildMode1>
+      <CurrentBuildMode>DefaultBuild</CurrentBuildMode>
+
+      <!-- ソースリスト -->
+      <SourceItemGuid0>rx-file-0001</SourceItemGuid0>
+      <SourceItemType0>CSource</SourceItemType0>
+      <SourceItemGuid1>rx-file-0002</SourceItemGuid1>
+      <SourceItemType1>CSource</SourceItemType1>
+      <SourceItemCount>2</SourceItemCount>
+
+      <!-- RX固有: COptionDefine-<N> (RL78は COptionD-<N>) -->
+      <COptionDefine-0>RX_MACRO_A
+RX_MACRO_B
+RX_CFG=1
+</COptionDefine-0>
+      <AsmOptionDefine-0>ASM_DEFINE=1
+</AsmOptionDefine-0>
+
+      <!-- RX固有: COptionInclude-<N> (RL78は COptionIncludePath-<N>) -->
+      <COptionInclude-0>r_config
+appli\include
+</COptionInclude-0>
+
+      <!-- ReleaseMode (index 1) -->
+      <COptionDefine-1>RX_MACRO_A
+RELEASE=1
+</COptionDefine-1>
+      <AsmOptionDefine-1 />
+      <COptionInclude-1>r_config
+</COptionInclude-1>
+
+    </Instance>
+  </Class>
+</CubeSuiteProject>
