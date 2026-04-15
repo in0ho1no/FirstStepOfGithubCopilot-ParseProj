@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 import xml.etree.ElementTree as ET
+import xml.parsers.expat as expat
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,38 @@ def decode_build_mode(b64: str) -> str:
     return raw.decode('utf-16-le').rstrip('\x00')
 
 
+def _md_code(s: str) -> str:
+    """Markdown のバッククォートコードスパン内に埋め込む文字列をサニタイズする。
+
+    改行・制御文字（コードスパンを壊す）とバッククォート（スパンを脱出できる）を
+    除去または置換する。
+    """
+    s = re.sub(r'[\x00-\x1f\x7f]', '', s)   # 制御文字を除去
+    s = s.replace('`', '\u02cb')              # バッククォートを類似文字 ˋ に置換
+    return s
+
+
+def _md_heading(s: str) -> str:
+    """Markdown の見出し行（# / ## / ### ...）に埋め込む文字列をサニタイズする。
+
+    改行（見出しを終わらせ偽の行を挿入できる）と
+    バッククォート（インラインコードの誤生成）を除去または置換する。
+    """
+    s = re.sub(r'[\x00-\x1f\x7f]', '', s)   # 制御文字・改行を除去
+    s = s.replace('`', '\u02cb')              # バッククォートを置換
+    return s
+
+
+def _plain(s: str) -> str:
+    """標準出力・標準エラー出力の 1 行として出力する文字列をサニタイズする。
+
+    改行・制御文字（ログ行注入）と ANSI エスケープシーケンス（端末操作）を除去する。
+    """
+    s = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', s)   # ANSI エスケープを除去
+    s = re.sub(r'[\x00-\x1f\x7f]', '', s)          # 制御文字・改行を除去
+    return s
+
+
 def _is_within_base(base_dir: Path, rel_path: str) -> bool:
     """
     rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
@@ -130,6 +163,36 @@ def _is_within_base(base_dir: Path, rel_path: str) -> bool:
         return True
     except (ValueError, OSError):
         return False
+
+
+def _parse_xml_safe(path: Path) -> ET.ElementTree:
+    """
+    エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
+
+    Python 標準の ET.parse は内部エンティティ展開（billion laughs 等）を防がない。
+    xml.parsers.expat を直接使い、EntityDeclHandler / StartDoctypeDeclHandler で
+    宣言を検知した時点で ParseError を送出することで展開処理に到達させない。
+    """
+    builder = ET.TreeBuilder()
+
+    def _block(*_: object) -> None:
+        raise ET.ParseError('XML エンティティ定義・DOCTYPE 宣言は許可されていません')
+
+    p = expat.ParserCreate()
+    p.StartElementHandler = lambda name, attrs: builder.start(name, attrs)
+    p.EndElementHandler = lambda name: builder.end(name)
+    p.CharacterDataHandler = lambda data: builder.data(data)
+    p.EntityDeclHandler = _block
+    p.StartDoctypeDeclHandler = _block
+
+    with path.open('rb') as f:
+        data = f.read()
+    try:
+        p.Parse(data, True)
+    except expat.ExpatError as e:
+        raise ET.ParseError(str(e)) from e
+
+    return ET.ElementTree(builder.close())
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +239,7 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         sys.exit(f'[ERROR] .mtpj ファイルが大きすぎます ({file_size:,} bytes)。上限: {_MAX_MTPJ_BYTES:,} bytes')
 
     try:
-        tree = ET.parse(mtpj_path)
+        tree = _parse_xml_safe(mtpj_path)
     except ET.ParseError as e:
         sys.exit(f'[ERROR] .mtpj の XML パースに失敗しました: {e}')
 
@@ -188,16 +251,18 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         return tag.split('}', 1)[-1] if '}' in tag else tag
 
     def find_text(elem: ET.Element, tag: str) -> str:
-        """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。"""
-        for child in elem:
+        """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。
+        再帰を使わずスタックで実装し、深いネストによる RecursionError を防ぐ。
+        """
+        stack = list(reversed(list(elem)))
+        while stack:
+            child = stack.pop()
             child_local = local(child.tag)
             if child_local == 'Instance':
-                continue  # ネストした Instance を越えない
+                continue  # このサブツリー全体をスキップ
             if child_local == tag:
                 return (child.text or '').strip()
-            result = find_text(child, tag)
-            if result:
-                return result
+            stack.extend(reversed(list(child)))
         return ''
 
     instances: list[ET.Element] = []
@@ -698,7 +763,7 @@ def generate_markdown(
     lines: list[str] = []
 
     # ヘッダ
-    lines.append(f'# Project structure: {mtpj_path.name} / {mode_name}')
+    lines.append(f'# Project structure: {_md_heading(mtpj_path.name)} / {_md_heading(mode_name)}')
     lines.append('')
 
     # -----------------------------------------------------------------------
@@ -716,10 +781,10 @@ def generate_markdown(
         by_cat[fe.category_path].append(fe)
 
     for cat in sorted(by_cat.keys()):
-        lines.append(f'### {cat if cat else "(root)"}')
+        lines.append(f'### {_md_heading(cat) if cat else "(root)"}')
         for fe in sorted(by_cat[cat], key=lambda x: x.rel_path):
             mark = '[B] ' if fe.is_build_target else '     '
-            lines.append(f'- {mark}`{fe.rel_path}`')
+            lines.append(f'- {mark}`{_md_code(fe.rel_path)}`')
         lines.append('')
 
     # Section 1 サブセクション: --preprocess 時のマクロ一覧
@@ -728,16 +793,16 @@ def generate_markdown(
         lines.append('')
         mode_macros = proj.macros_by_mode_index.get(mode_index, {})
         if mode_macros:
-            lines.append('**From .mtpj (`COptionD` / `AsmOptionDefine`):**')
+            lines.append('**From project (compiler defines):**')
             lines.append('')
             for k, v in sorted(mode_macros.items()):
-                lines.append(f'- `{k}` = `{v}`')
+                lines.append(f'- `{_md_code(k)}` = `{_md_code(v)}`')
             lines.append('')
         if builtin_macros:
-            lines.append('**From `compiler_builtins.json` (compiler built-ins):**')
+            lines.append('**From compiler built-ins:**')
             lines.append('')
             for k, v in sorted(builtin_macros.items()):
-                lines.append(f'- `{k}` = `{v}`')
+                lines.append(f'- `{_md_code(k)}` = `{_md_code(v)}`')
             lines.append('')
 
     # -----------------------------------------------------------------------
@@ -787,7 +852,7 @@ def generate_markdown(
 
         for fe in sorted(scan_entries, key=lambda x: x.rel_path):
             if not _is_within_base(mtpj_dir, fe.rel_path):
-                print(f'[WARN] プロジェクト外パスをスキップ: {fe.rel_path}', file=sys.stderr)
+                print(f'[WARN] プロジェクト外パスをスキップ: {_plain(fe.rel_path)}', file=sys.stderr)
                 continue
             src_path = mtpj_dir / fe.rel_path
             scan = scan_includes(src_path, use_preprocess, eval_defs)
@@ -803,14 +868,14 @@ def generate_markdown(
             if not scan.includes:
                 continue
 
-            lines.append(f'### `{fe.rel_path}`')
+            lines.append(f'### `{_md_code(fe.rel_path)}`')
             for inc in scan.includes:
                 resolved = resolve_include(inc, proj.files)
                 if resolved:
-                    targets = ', '.join(f'`{r.rel_path}`' for r in resolved)
-                    lines.append(f'- `{inc}` → (project) {targets}')
+                    targets = ', '.join(f'`{_md_code(r.rel_path)}`' for r in resolved)
+                    lines.append(f'- `{_md_code(inc)}` → (project) {targets}')
                 else:
-                    lines.append(f'- `{inc}`')
+                    lines.append(f'- `{_md_code(inc)}`')
             lines.append('')
 
         if use_preprocess:
@@ -885,7 +950,7 @@ def main() -> None:
         else:
             for i, m in enumerate(proj.build_modes):
                 marker = ' ← current' if m == proj.current_build_mode else ''
-                print(f'  [{i}] {m}{marker}')
+                print(f'  [{i}] {_plain(m)}{marker}')
         return
 
     # ビルドモード選択
@@ -894,9 +959,9 @@ def main() -> None:
         sys.exit('[ERROR] ビルドモードを -m で指定するか、.mtpj に CurrentBuildMode が必要です。')
 
     if mode_name not in proj.build_modes:
-        available = ', '.join(proj.build_modes) or '(なし)'
+        available = ', '.join(_plain(m) for m in proj.build_modes) or '(なし)'
         sys.exit(
-            f'[ERROR] ビルドモード "{mode_name}" が見つかりません。\n'
+            f'[ERROR] 指定されたビルドモードが見つかりません。\n'
             f'利用可能: {available}'
         )
 
@@ -906,18 +971,18 @@ def main() -> None:
     if args.dump_macros:
         macros = proj.macros_by_mode_index.get(mode_index, {})
         inc_paths = proj.include_paths_by_mode_index.get(mode_index, [])
-        print(f'Build mode : {mode_name} (index {mode_index})')
+        print(f'Build mode : {_plain(mode_name)} (index {mode_index})')
         print(f'Macros     : {len(macros)}')
         if macros:
             print()
             for k, v in sorted(macros.items()):
-                print(f'  {k}={v}')
+                print(f'  {_plain(k)}={_plain(v)}')
         print()
         print(f'Include paths: {len(inc_paths)}')
         if inc_paths:
             print()
             for p in inc_paths:
-                print(f'  {p}')
+                print(f'  {_plain(p)}')
         return
 
     # 出力パス
