@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 import xml.etree.ElementTree as ET
+import xml.parsers.expat as expat
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +133,36 @@ def _is_within_base(base_dir: Path, rel_path: str) -> bool:
         return False
 
 
+def _parse_xml_safe(path: Path) -> ET.ElementTree:
+    """
+    エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
+
+    Python 標準の ET.parse は内部エンティティ展開（billion laughs 等）を防がない。
+    xml.parsers.expat を直接使い、EntityDeclHandler / StartDoctypeDeclHandler で
+    宣言を検知した時点で ParseError を送出することで展開処理に到達させない。
+    """
+    builder = ET.TreeBuilder()
+
+    def _block(*_: object) -> None:
+        raise ET.ParseError('XML エンティティ定義・DOCTYPE 宣言は許可されていません')
+
+    p = expat.ParserCreate()
+    p.StartElementHandler = lambda name, attrs: builder.start(name, attrs)
+    p.EndElementHandler = lambda name: builder.end(name)
+    p.CharacterDataHandler = lambda data: builder.data(data)
+    p.EntityDeclHandler = _block
+    p.StartDoctypeDeclHandler = _block
+
+    with path.open('rb') as f:
+        data = f.read()
+    try:
+        p.Parse(data, True)
+    except expat.ExpatError as e:
+        raise ET.ParseError(str(e)) from e
+
+    return ET.ElementTree(builder.close())
+
+
 # ---------------------------------------------------------------------------
 # .mtpj パーサ
 # ---------------------------------------------------------------------------
@@ -176,7 +207,7 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         sys.exit(f'[ERROR] .mtpj ファイルが大きすぎます ({file_size:,} bytes)。上限: {_MAX_MTPJ_BYTES:,} bytes')
 
     try:
-        tree = ET.parse(mtpj_path)
+        tree = _parse_xml_safe(mtpj_path)
     except ET.ParseError as e:
         sys.exit(f'[ERROR] .mtpj の XML パースに失敗しました: {e}')
 
@@ -188,16 +219,18 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         return tag.split('}', 1)[-1] if '}' in tag else tag
 
     def find_text(elem: ET.Element, tag: str) -> str:
-        """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。"""
-        for child in elem:
+        """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。
+        再帰を使わずスタックで実装し、深いネストによる RecursionError を防ぐ。
+        """
+        stack = list(reversed(list(elem)))
+        while stack:
+            child = stack.pop()
             child_local = local(child.tag)
             if child_local == 'Instance':
-                continue  # ネストした Instance を越えない
+                continue  # このサブツリー全体をスキップ
             if child_local == tag:
                 return (child.text or '').strip()
-            result = find_text(child, tag)
-            if result:
-                return result
+            stack.extend(reversed(list(child)))
         return ''
 
     instances: list[ET.Element] = []

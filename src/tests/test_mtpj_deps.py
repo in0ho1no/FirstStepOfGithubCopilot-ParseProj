@@ -99,6 +99,49 @@ class TestParseMtpj:
 
 
 # ---------------------------------------------------------------------------
+# XML セキュリティテスト
+# ---------------------------------------------------------------------------
+class TestXmlSecurity:
+    """悪意ある XML 入力に対する堅牢性テスト。"""
+
+    def test_entity_expansion_rejected(self, tmp_path: Path) -> None:
+        """内部エンティティ展開（billion laughs）が ParseError になること。"""
+        evil = tmp_path / 'evil.mtpj'
+        evil.write_text(
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE foo [<!ENTITY a "AAAA">]>'
+            '<CubeSuiteProject><foo>&a;</foo></CubeSuiteProject>',
+            encoding='utf-8',
+        )
+        with pytest.raises(SystemExit):
+            parse_mtpj(evil)
+
+    def test_doctype_rejected(self, tmp_path: Path) -> None:
+        """DOCTYPE 宣言だけの XML が ParseError になること。"""
+        evil = tmp_path / 'doctype.mtpj'
+        evil.write_text(
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE foo SYSTEM "http://evil.example.com/evil.dtd">'
+            '<CubeSuiteProject/>',
+            encoding='utf-8',
+        )
+        with pytest.raises(SystemExit):
+            parse_mtpj(evil)
+
+    def test_deep_nesting_no_recursion_error(self, tmp_path: Path) -> None:
+        """深いネスト XML で RecursionError が起きないこと。"""
+        depth = 2000
+        inner = '<X>value</X>'
+        for _ in range(depth):
+            inner = f'<W>{inner}</W>'
+        xml = f'<CubeSuiteProject><Instances><Instance Guid="g1">{inner}</Instance></Instances></CubeSuiteProject>'
+        deep = tmp_path / 'deep.mtpj'
+        deep.write_text(xml, encoding='utf-8')
+        # RecursionError が起きずに完走すること（結果は問わない）
+        parse_mtpj(deep)
+
+
+# ---------------------------------------------------------------------------
 # RX系（CC-RX）固有タグテスト
 # ---------------------------------------------------------------------------
 class TestParseMtpjRx:
