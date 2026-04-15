@@ -15,6 +15,9 @@ from mtpj_deps import (
     IfFrame,
     MtpjProject,
     ScanResult,
+    _md_code,
+    _md_heading,
+    _plain,
     _transform_expr,
     decode_build_mode,
     evaluate_expr,
@@ -96,6 +99,74 @@ class TestParseMtpj:
     def test_nonexistent_file(self) -> None:
         with pytest.raises(SystemExit):
             parse_mtpj(FIXTURES / 'nonexistent.mtpj')
+
+
+# ---------------------------------------------------------------------------
+# 出力サニタイズテスト
+# ---------------------------------------------------------------------------
+class TestOutputSanitize:
+    """_md_code / _md_heading / _plain の動作テスト。"""
+
+    def test_md_code_removes_backtick(self) -> None:
+        """バッククォートがコードスパンを脱出できない文字に変換されること。"""
+        assert '`' not in _md_code('foo`bar')
+
+    def test_md_code_removes_newline(self) -> None:
+        """改行がコードスパンを壊さないよう除去されること。"""
+        assert '\n' not in _md_code('foo\nbar')
+        assert '\r' not in _md_code('foo\rbar')
+
+    def test_md_code_removes_control_chars(self) -> None:
+        """制御文字が除去されること。"""
+        assert '\x00' not in _md_code('foo\x00bar')
+        assert '\x1b' not in _md_code('foo\x1bbar')
+
+    def test_md_heading_removes_newline(self) -> None:
+        """改行で偽の見出しや行が注入されないよう除去されること。"""
+        result = _md_heading('Sources\n## Injected')
+        assert '\n' not in result
+        assert 'Injected' in result  # テキスト自体は保持
+
+    def test_md_heading_removes_backtick(self) -> None:
+        assert '`' not in _md_heading('foo`bar')
+
+    def test_plain_removes_newline(self) -> None:
+        """改行でログ行を注入できないよう除去されること。"""
+        result = _plain('value\n[INFO] Fake log')
+        assert '\n' not in result
+        assert 'Fake log' in result  # テキスト自体は保持
+
+    def test_plain_removes_ansi(self) -> None:
+        """ANSI エスケープシーケンスが除去されること。"""
+        assert '\x1b' not in _plain('\x1b[31mred\x1b[0m')
+        assert 'red' in _plain('\x1b[31mred\x1b[0m')
+
+    def test_plain_removes_control_chars(self) -> None:
+        assert '\x00' not in _plain('foo\x00bar')
+
+    def test_md_output_no_backtick_injection(self) -> None:
+        """悪意あるファイル名にバッククォートが含まれても Markdown が壊れないこと。"""
+        proj = parse_mtpj(FIXTURES / 'sample.mtpj')
+        md = generate_markdown(
+            proj=proj,
+            mode_name='DefaultBuild',
+            mode_index=0,
+            mtpj_path=FIXTURES / 'sample.mtpj',
+            use_preprocess=True,
+            no_scan=False,
+            builtin_macros={},
+        )
+        # 生成された Markdown 内にコードスパンを壊すバッククォートが連続しないこと
+        # （正規表現でコードスパンの整合性を確認する簡易チェック）
+        import re
+        # `` ` `` が単独で現れる箇所（コードスパンの開閉に使われるもの）を確認し、
+        # データ由来の値に生のバッククォートが含まれていないことを確認する
+        lines = md.splitlines()
+        for line in lines:
+            # "- `...`" や "### `...`" 形式の行でコードスパンが正しく閉じていること
+            if re.match(r'[-#*] `', line) or re.match(r'###? `', line):
+                # バッククォートの個数が偶数（開閉が揃っている）
+                assert line.count('`') % 2 == 0, f'バッククォートが揃っていない行: {line!r}'
 
 
 # ---------------------------------------------------------------------------
