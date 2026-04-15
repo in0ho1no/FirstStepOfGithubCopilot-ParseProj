@@ -793,13 +793,13 @@ def generate_markdown(
         lines.append('')
         mode_macros = proj.macros_by_mode_index.get(mode_index, {})
         if mode_macros:
-            lines.append('**From .mtpj (`COptionD` / `AsmOptionDefine`):**')
+            lines.append('**From project (compiler defines):**')
             lines.append('')
             for k, v in sorted(mode_macros.items()):
                 lines.append(f'- `{_md_code(k)}` = `{_md_code(v)}`')
             lines.append('')
         if builtin_macros:
-            lines.append('**From `compiler_builtins.json` (compiler built-ins):**')
+            lines.append('**From compiler built-ins:**')
             lines.append('')
             for k, v in sorted(builtin_macros.items()):
                 lines.append(f'- `{_md_code(k)}` = `{_md_code(v)}`')
@@ -950,7 +950,7 @@ def main() -> None:
         else:
             for i, m in enumerate(proj.build_modes):
                 marker = ' ← current' if m == proj.current_build_mode else ''
-                print(f'  [{i}] {m}{marker}')
+                print(f'  [{i}] {_plain(m)}{marker}')
         return
 
     # ビルドモード選択
@@ -959,9 +959,9 @@ def main() -> None:
         sys.exit('[ERROR] ビルドモードを -m で指定するか、.mtpj に CurrentBuildMode が必要です。')
 
     if mode_name not in proj.build_modes:
-        available = ', '.join(proj.build_modes) or '(なし)'
+        available = ', '.join(_plain(m) for m in proj.build_modes) or '(なし)'
         sys.exit(
-            f'[ERROR] ビルドモード "{mode_name}" が見つかりません。\n'
+            f'[ERROR] 指定されたビルドモードが見つかりません。\n'
             f'利用可能: {available}'
         )
 
