@@ -201,16 +201,32 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         return ''
 
     instances: list[ET.Element] = []
+    # RL78系: Instance の親は <Instances>
+    # RX系  : Instance の親は <Class>（同一 Class 内に複数の兄弟 Instance がある）
+    # parent_map を使って BuildTool Instance の親要素を特定し、
+    # マクロ・インクルードパスを親スコープから検索できるようにする。
+    parent_map: dict[ET.Element, ET.Element] = {}
     for elem in root.iter():
         if local(elem.tag) == 'Instance':
             instances.append(elem)
+        for child in elem:
+            parent_map[child] = elem
 
     # guid → name / type / rel_path / parent_guid のマッピング
     raw_items: dict[str, dict] = {}
     for inst in instances:
         guid = inst.get('Guid', '')
+        if not guid:
+            continue
         item_type = find_text(inst, 'Type')
-        name = find_text(inst, 'n')
+        # CS+ RX系では同一 GUID の Instance が複数存在する場合がある。
+        # 後から現れるビルド設定専用 Instance（Type が空）で
+        # File / Category エントリを上書きしないよう保護する。
+        existing = raw_items.get(guid)
+        if existing and existing['type'] in ('File', 'Category') and item_type not in ('File', 'Category'):
+            continue
+        # 名前タグは CS+ RL78 系では <n>、RX 系では <Name> を使う
+        name = find_text(inst, 'n') or find_text(inst, 'Name')
         rel_path = find_text(inst, 'RelativePath').replace('\\', '/')
         parent = find_text(inst, 'ParentItem')
         raw_items[guid] = {
@@ -291,22 +307,31 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
                     src_guids.add(val)
         proj.build_target_guids = src_guids
 
-        # マクロ・インクルードパス（COptionD-<N>, AsmOptionDefine-<N>）
-        # 同様に再帰検索する
+        # マクロ・インクルードパスを検索する。
+        # RL78(CC-RL): COptionD-<N> / RX(CC-RX): COptionDefine-<N>
+        # アセンブラ define は両系で AsmOptionDefine-<N> 共通。
+        # インクルードパス: RL78 は COptionIncludePath-<N> / RX は COptionInclude-<N>
+        #
+        # RX系では BuildTool Instance とオプション Instance が同一 Class 内の
+        # 兄弟要素に分かれているため、親要素（Class / Instances）を起点に検索する。
+        # RL78系では BuildTool Instance の内部にすべてのオプションがあるが、
+        # 親要素を起点にしても同じ結果が得られる。
+        opt_scope = parent_map.get(inst, inst)
+
         for idx in range(count):
             macros: dict[str, str] = {}
-            for elem in inst.iter():
+            for elem in opt_scope.iter():
                 tag = local(elem.tag)
-                if tag in (f'COptionD-{idx}', f'AsmOptionDefine-{idx}'):
+                if tag in (f'COptionD-{idx}', f'COptionDefine-{idx}', f'AsmOptionDefine-{idx}'):
                     raw = (elem.text or '').strip()
                     if raw:
                         macros.update(_parse_macros(raw))
             proj.macros_by_mode_index[idx] = macros
 
             inc_paths: list[str] = []
-            for elem in inst.iter():
+            for elem in opt_scope.iter():
                 tag = local(elem.tag)
-                if tag == f'COptionIncludePath-{idx}':
+                if tag in (f'COptionIncludePath-{idx}', f'COptionInclude-{idx}'):
                     raw = (elem.text or '').strip()
                     if raw:
                         inc_paths = [p.strip() for p in raw.splitlines() if p.strip()]
@@ -847,6 +872,7 @@ def main() -> None:
     parser.add_argument('--no-scan', action='store_true', help='#include スキャンをスキップ')
     parser.add_argument('--list-modes', action='store_true', help='ビルドモード一覧を表示して終了')
     parser.add_argument('--preprocess', action='store_true', help='条件ディレクティブ評価を有効化')
+    parser.add_argument('--dump-macros', action='store_true', help='指定ビルドモードのマクロ定義を標準出力に表示して終了')
 
     args = parser.parse_args()
 
@@ -875,6 +901,24 @@ def main() -> None:
         )
 
     mode_index = proj.build_modes.index(mode_name)
+
+    # --dump-macros: マクロ定義を標準出力に表示して終了
+    if args.dump_macros:
+        macros = proj.macros_by_mode_index.get(mode_index, {})
+        inc_paths = proj.include_paths_by_mode_index.get(mode_index, [])
+        print(f'Build mode : {mode_name} (index {mode_index})')
+        print(f'Macros     : {len(macros)}')
+        if macros:
+            print()
+            for k, v in sorted(macros.items()):
+                print(f'  {k}={v}')
+        print()
+        print(f'Include paths: {len(inc_paths)}')
+        if inc_paths:
+            print()
+            for p in inc_paths:
+                print(f'  {p}')
+        return
 
     # 出力パス
     if args.out:

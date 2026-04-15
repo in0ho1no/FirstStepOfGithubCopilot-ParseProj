@@ -99,6 +99,60 @@ class TestParseMtpj:
 
 
 # ---------------------------------------------------------------------------
+# RX系（CC-RX）固有タグテスト
+# ---------------------------------------------------------------------------
+class TestParseMtpjRx:
+    """CC-RX形式の .mtpj（COptionDefine-N / COptionInclude-N）の解析テスト。"""
+
+    def test_rx_files_registered(self) -> None:
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        rel_paths = {fe.rel_path for fe in proj.files.values()}
+        assert 'src/rx_main.c' in rel_paths
+        assert 'src/rx_sub.c' in rel_paths
+        assert 'src/rx_main.h' in rel_paths
+
+    def test_rx_build_modes(self) -> None:
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        assert 'DefaultBuild' in proj.build_modes
+        assert 'ReleaseMode' in proj.build_modes
+
+    def test_rx_build_targets(self) -> None:
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        build_targets = {fe.rel_path for fe in proj.files.values() if fe.is_build_target}
+        assert 'src/rx_main.c' in build_targets
+        assert 'src/rx_sub.c' in build_targets
+        assert 'src/rx_main.h' not in build_targets
+
+    def test_rx_c_macros_extracted(self) -> None:
+        """COptionDefine-<N>（RX固有タグ）からマクロが取得できること。"""
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        macros = proj.macros_by_mode_index.get(0, {})
+        assert 'RX_MACRO_A' in macros
+        assert 'RX_MACRO_B' in macros
+        assert macros.get('RX_CFG') == '1'
+
+    def test_rx_asm_macros_extracted(self) -> None:
+        """AsmOptionDefine-<N>（RX/RL78共通タグ）からアセンブラマクロが取得できること。"""
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        macros = proj.macros_by_mode_index.get(0, {})
+        assert macros.get('ASM_DEFINE') == '1'
+
+    def test_rx_include_paths_extracted(self) -> None:
+        """COptionInclude-<N>（RX固有タグ）からインクルードパスが取得できること。"""
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        inc = proj.include_paths_by_mode_index.get(0, [])
+        assert 'r_config' in inc
+        assert r'appli\include' in inc
+
+    def test_rx_release_macros(self) -> None:
+        """ReleaseMode (index 1) のマクロが取得できること。"""
+        proj = parse_mtpj(FIXTURES / 'rx_sample.mtpj')
+        macros = proj.macros_by_mode_index.get(1, {})
+        assert 'RX_MACRO_A' in macros
+        assert macros.get('RELEASE') == '1'
+
+
+# ---------------------------------------------------------------------------
 # セキュリティテスト
 # ---------------------------------------------------------------------------
 class TestSecurity:
