@@ -14,3 +14,8 @@ __pycache__/
 
 # pytest キャッシュ
 .pytest_cache/
+
+RX65N_RI600V4_FIT
+
+# .github 内の生成物（.gitkeep のみ追跡）
+/.github/*.md
