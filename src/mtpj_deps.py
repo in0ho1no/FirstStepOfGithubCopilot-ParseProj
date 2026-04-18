@@ -6,12 +6,10 @@ import base64
 import json
 import re
 import sys
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
 import xml.etree.ElementTree as ET
 import xml.parsers.expat as expat
-
+from dataclasses import dataclass, field
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # 定数
@@ -153,8 +151,8 @@ def _plain(s: str) -> str:
 
 
 def _is_within_base(base_dir: Path, rel_path: str) -> bool:
-    """
-    rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
+    """rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
+
     パストラバーサル（../../../ 等）を防ぐために使用する。
     """
     try:
@@ -166,8 +164,7 @@ def _is_within_base(base_dir: Path, rel_path: str) -> bool:
 
 
 def _parse_xml_safe(path: Path) -> ET.ElementTree:
-    """
-    エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
+    """エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
 
     Python 標準の ET.parse は内部エンティティ展開（billion laughs 等）を防がない。
     xml.parsers.expat を直接使い、EntityDeclHandler / StartDoctypeDeclHandler で
@@ -225,8 +222,8 @@ def _parse_macros(raw: str) -> dict[str, str]:
 
 
 def parse_mtpj(mtpj_path: Path) -> MtpjProject:
-    """
-    .mtpj XML を解析して MtpjProject を返す。
+    """.mtpj XML を解析して MtpjProject を返す。
+
     名前空間に依存しないよう、タグのローカル名で比較する。
     """
     proj = MtpjProject()
@@ -244,6 +241,8 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         sys.exit(f'[ERROR] .mtpj の XML パースに失敗しました: {e}')
 
     root = tree.getroot()
+    if root is None:
+        sys.exit('[ERROR] .mtpj の XML ルート要素が存在しません')
 
     # すべての Instance 要素を収集
     # 名前空間を無視するため、ローカル名で検索
@@ -252,6 +251,7 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
 
     def find_text(elem: ET.Element, tag: str) -> str:
         """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。
+
         再帰を使わずスタックで実装し、深いネストによる RecursionError を防ぐ。
         """
         stack = list(reversed(list(elem)))
@@ -278,7 +278,7 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
             parent_map[child] = elem
 
     # guid → name / type / rel_path / parent_guid のマッピング
-    raw_items: dict[str, dict] = {}
+    raw_items: dict[str, dict[str, str]] = {}
     for inst in instances:
         guid = inst.get('Guid', '')
         if not guid:
@@ -381,7 +381,9 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
         # 兄弟要素に分かれているため、親要素（Class / Instances）を起点に検索する。
         # RL78系では BuildTool Instance の内部にすべてのオプションがあるが、
         # 親要素を起点にしても同じ結果が得られる。
-        opt_scope = parent_map.get(inst, inst)
+        opt_scope = parent_map.get(inst)
+        if opt_scope is None:
+            opt_scope = inst
 
         for idx in range(count):
             macros: dict[str, str] = {}
@@ -473,57 +475,57 @@ def _eval_node(node: ast.AST, defs: dict[str, int]) -> int:
     if isinstance(node, ast.BinOp):
         left = _eval_node(node.left, defs)
         right = _eval_node(node.right, defs)
-        op = node.op
-        if isinstance(op, ast.Add):
+        bin_op = node.op
+        if isinstance(bin_op, ast.Add):
             return left + right
-        if isinstance(op, ast.Sub):
+        if isinstance(bin_op, ast.Sub):
             return left - right
-        if isinstance(op, ast.Mult):
+        if isinstance(bin_op, ast.Mult):
             return left * right
-        if isinstance(op, ast.Div):
+        if isinstance(bin_op, ast.Div):
             # C セマンティクス: 整数除算
             if right == 0:
                 raise _EvalError('ゼロ除算')
             return int(left / right)
-        if isinstance(op, ast.FloorDiv):
+        if isinstance(bin_op, ast.FloorDiv):
             if right == 0:
                 raise _EvalError('ゼロ除算')
             return left // right
-        if isinstance(op, ast.Mod):
+        if isinstance(bin_op, ast.Mod):
             if right == 0:
                 raise _EvalError('ゼロ除算')
             return left % right
-        if isinstance(op, ast.BitAnd):
+        if isinstance(bin_op, ast.BitAnd):
             return left & right
-        if isinstance(op, ast.BitOr):
+        if isinstance(bin_op, ast.BitOr):
             return left | right
-        if isinstance(op, ast.BitXor):
+        if isinstance(bin_op, ast.BitXor):
             return left ^ right
-        if isinstance(op, ast.LShift):
+        if isinstance(bin_op, ast.LShift):
             return left << right
-        if isinstance(op, ast.RShift):
+        if isinstance(bin_op, ast.RShift):
             return left >> right
-        raise _EvalError(f'未サポート二項演算子: {type(op).__name__}')
+        raise _EvalError(f'未サポート二項演算子: {type(bin_op).__name__}')
 
     # 比較演算子
     if isinstance(node, ast.Compare):
         left = _eval_node(node.left, defs)
-        for op, comparator in zip(node.ops, node.comparators):
+        for cmp_op, comparator in zip(node.ops, node.comparators, strict=True):
             right = _eval_node(comparator, defs)
-            if isinstance(op, ast.Eq):
+            if isinstance(cmp_op, ast.Eq):
                 result = left == right
-            elif isinstance(op, ast.NotEq):
+            elif isinstance(cmp_op, ast.NotEq):
                 result = left != right
-            elif isinstance(op, ast.Lt):
+            elif isinstance(cmp_op, ast.Lt):
                 result = left < right
-            elif isinstance(op, ast.LtE):
+            elif isinstance(cmp_op, ast.LtE):
                 result = left <= right
-            elif isinstance(op, ast.Gt):
+            elif isinstance(cmp_op, ast.Gt):
                 result = left > right
-            elif isinstance(op, ast.GtE):
+            elif isinstance(cmp_op, ast.GtE):
                 result = left >= right
             else:
-                raise _EvalError(f'未サポート比較演算子: {type(op).__name__}')
+                raise _EvalError(f'未サポート比較演算子: {type(cmp_op).__name__}')
             if not result:
                 return 0
             left = right
@@ -561,8 +563,8 @@ _OP_REPLACEMENTS = [
 
 
 def _transform_expr(expr: str, defs: dict[str, int]) -> tuple[str, dict[str, int]]:
-    """
-    C プリプロセッサ条件式を Python の ast.parse が受け付ける形に変換する。
+    """C プリプロセッサ条件式を Python の ast.parse が受け付ける形に変換する。
+
     返り値: (変換後の式文字列, 評価用名前辞書)
     """
     # defined(X) → __D_X__ 形式の一時識別子に変換
@@ -595,8 +597,8 @@ def _transform_expr(expr: str, defs: dict[str, int]) -> tuple[str, dict[str, int
 
 
 def evaluate_expr(expr: str, defs: dict[str, int]) -> tuple[bool, bool]:
-    """
-    C プリプロセッサ条件式を評価する。
+    """C プリプロセッサ条件式を評価する。
+
     返り値: (評価結果, 保守的フォールバックが必要だったか)
     """
     try:
@@ -623,9 +625,9 @@ def scan_includes(
     source_path: Path,
     use_preprocess: bool,
     defs: dict[str, int],
-) -> Optional[ScanResult]:
-    """
-    ソースファイルを読み込み、#include を抽出する。
+) -> ScanResult | None:
+    """ソースファイルを読み込み、#include を抽出する。
+
     use_preprocess=True の場合は条件ディレクティブを評価する。
     ファイルが存在しない場合は None を返す。
     """
@@ -891,8 +893,8 @@ def generate_markdown(
     total_files = len(proj.files)
     build_files = sum(1 for fe in proj.files.values() if fe.is_build_target)
     categories = len({fe.category_path for fe in proj.files.values()})
-    lines.append(f'| Item | Count |')
-    lines.append(f'|------|-------|')
+    lines.append('| Item | Count |')
+    lines.append('|------|-------|')
     lines.append(f'| Registered files | {total_files} |')
     lines.append(f'| Build targets (`[B]`) | {build_files} |')
     lines.append(f'| Categories | {categories} |')
@@ -919,7 +921,19 @@ def load_builtin_macros(script_dir: Path) -> dict[str, str]:
         return {}
     try:
         with json_path.open(encoding='utf-8') as f:
-            return json.load(f)
+            loaded = json.load(f)
+        if not isinstance(loaded, dict):
+            return {}
+        macros: dict[str, str] = {}
+        for key, value in loaded.items():
+            if not isinstance(key, str):
+                continue
+            if isinstance(value, str):
+                macros[key] = value
+                continue
+            if value is not None:
+                macros[key] = str(value)
+        return macros
     except Exception:
         return {}
 
