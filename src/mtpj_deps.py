@@ -151,8 +151,8 @@ def _plain(s: str) -> str:
 
 
 def _is_within_base(base_dir: Path, rel_path: str) -> bool:
-    """
-    rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
+    """rel_path を base_dir に結合して解決したパスが base_dir の外を指していないか検証する。
+
     パストラバーサル（../../../ 等）を防ぐために使用する。
     """
     try:
@@ -164,8 +164,7 @@ def _is_within_base(base_dir: Path, rel_path: str) -> bool:
 
 
 def _parse_xml_safe(path: Path) -> ET.ElementTree:
-    """
-    エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
+    """エンティティ系 XML 攻撃を遮断した安全な XML パーサ。
 
     Python 標準の ET.parse は内部エンティティ展開（billion laughs 等）を防がない。
     xml.parsers.expat を直接使い、EntityDeclHandler / StartDoctypeDeclHandler で
@@ -223,8 +222,8 @@ def _parse_macros(raw: str) -> dict[str, str]:
 
 
 def parse_mtpj(mtpj_path: Path) -> MtpjProject:
-    """
-    .mtpj XML を解析して MtpjProject を返す。
+    """.mtpj XML を解析して MtpjProject を返す。
+
     名前空間に依存しないよう、タグのローカル名で比較する。
     """
     proj = MtpjProject()
@@ -252,6 +251,7 @@ def parse_mtpj(mtpj_path: Path) -> MtpjProject:
 
     def find_text(elem: ET.Element, tag: str) -> str:
         """深さ優先でタグを探す。ネストした Instance 要素の内部には立ち入らない。
+
         再帰を使わずスタックで実装し、深いネストによる RecursionError を防ぐ。
         """
         stack = list(reversed(list(elem)))
@@ -563,8 +563,8 @@ _OP_REPLACEMENTS = [
 
 
 def _transform_expr(expr: str, defs: dict[str, int]) -> tuple[str, dict[str, int]]:
-    """
-    C プリプロセッサ条件式を Python の ast.parse が受け付ける形に変換する。
+    """C プリプロセッサ条件式を Python の ast.parse が受け付ける形に変換する。
+
     返り値: (変換後の式文字列, 評価用名前辞書)
     """
     # defined(X) → __D_X__ 形式の一時識別子に変換
@@ -597,8 +597,8 @@ def _transform_expr(expr: str, defs: dict[str, int]) -> tuple[str, dict[str, int
 
 
 def evaluate_expr(expr: str, defs: dict[str, int]) -> tuple[bool, bool]:
-    """
-    C プリプロセッサ条件式を評価する。
+    """C プリプロセッサ条件式を評価する。
+
     返り値: (評価結果, 保守的フォールバックが必要だったか)
     """
     try:
@@ -626,8 +626,8 @@ def scan_includes(
     use_preprocess: bool,
     defs: dict[str, int],
 ) -> ScanResult | None:
-    """
-    ソースファイルを読み込み、#include を抽出する。
+    """ソースファイルを読み込み、#include を抽出する。
+
     use_preprocess=True の場合は条件ディレクティブを評価する。
     ファイルが存在しない場合は None を返す。
     """
