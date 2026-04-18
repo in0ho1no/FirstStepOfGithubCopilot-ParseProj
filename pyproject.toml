@@ -7,6 +7,11 @@ requires-python = ">=3.12"
 dependencies = [
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
 [tool.ruff]
 # 1行の最大文字数
 line-length = 150
@@ -40,6 +45,7 @@ select = [
     "PT",   # flake8-pytest-style (pytestのテストコードスタイルをチェック、pytest使用時のみ有効)
     "UP",   # pyupgrade (古いPython構文を新しい推奨構文に自動更新)
     "N",    # pep8-naming (Pythonの命名規則 PEP8 に準拠しているかチェック)
+    "D",    # pydocstyle (docstringの規約チェック、スタイルは [tool.ruff.lint.pydocstyle] で設定)
     "RUF",  # Ruff固有のルール (Ruff独自の便利なチェック)
 ]
 
@@ -92,7 +98,5 @@ exclude = [
     "docs/source/conf\\.py$", # . はエスケープ
 ]
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-]
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
