@@ -12,13 +12,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mtpj_deps import (
-    IfFrame,
-    MtpjProject,
     ScanResult,
     _md_code,
     _md_heading,
     _plain,
-    _transform_expr,
     decode_build_mode,
     evaluate_expr,
     generate_markdown,
@@ -379,16 +376,16 @@ class TestEvaluateExpr:
 
     def test_single_and_both_defined(self) -> None:
         """単一 & のテスト（0/1 フラグなら && と同等）。"""
-        result, fallback = evaluate_expr('MacroA & MacroB', self.defs)
+        result, _fallback = evaluate_expr('MacroA & MacroB', self.defs)
         assert result is True
 
     def test_single_and_one_undefined(self) -> None:
-        result, fallback = evaluate_expr('MacroA & MacroC', self.defs)
+        result, _fallback = evaluate_expr('MacroA & MacroC', self.defs)
         assert result is False
 
     def test_not_equal_not_broken(self) -> None:
         """!= が not= に壊れないことを確認。"""
-        result, fallback = evaluate_expr('MacroA != 0', self.defs)
+        result, _fallback = evaluate_expr('MacroA != 0', self.defs)
         assert result is True
 
     def test_flag_usb_identifier_not_broken(self) -> None:
@@ -412,7 +409,7 @@ class TestEvaluateExpr:
     def test_integer_division_not_float(self) -> None:
         """5/2 == 2.5 は偽（Python 浮動小数ではない）。"""
         # 2.5 はリテラルとしてパース不可 → fallback になる
-        result, fallback = evaluate_expr('5/2 == 2', self.defs)
+        result, _fallback = evaluate_expr('5/2 == 2', self.defs)
         assert result is True
 
     def test_defined_paren(self) -> None:
@@ -470,15 +467,15 @@ class TestEvaluateExpr:
 class TestAstEvaluatorWhitelist:
     def test_os_system_rejected(self) -> None:
         """os.system への参照は拒否され、保守的フォールバックになる。"""
-        result, fallback = evaluate_expr('__import__("os").system("echo")', {})
+        _result, fallback = evaluate_expr('__import__("os").system("echo")', {})
         assert fallback is True
 
     def test_lambda_rejected(self) -> None:
-        result, fallback = evaluate_expr('(lambda x: x)(1)', {})
+        _result, fallback = evaluate_expr('(lambda x: x)(1)', {})
         assert fallback is True
 
     def test_subscript_rejected(self) -> None:
-        result, fallback = evaluate_expr('a[0]', {})
+        _result, fallback = evaluate_expr('a[0]', {})
         assert fallback is True
 
 
