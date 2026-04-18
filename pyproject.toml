@@ -9,7 +9,9 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.20.1",
     "pytest>=9.0.3",
+    "ruff>=0.15.11",
 ]
 
 [tool.ruff]
@@ -56,6 +58,10 @@ ignore = [
     # 日本語コメント・docstring・文字列中の全角記号（（）：など）を許容する
     # RUF001 / RUF002 / RUF003 は「見た目が似た別文字の誤混入」を検知するルールだが、
     # 日本語記述では全角記号の使用が自然であるため無効化する
+    # D205 / D212 / D415 は英語前提の docstring スタイルが強く、日本語 docstring と相性が悪い
+    "D205",
+    "D212",
+    "D415",
     "RUF001",  # 文字列リテラル
     "RUF002",  # docstring
     "RUF003",  # コメント
@@ -66,6 +72,8 @@ ignore = [
 # __init__.py ファイルでは、F401 (未使用import) エラーを無視する
 # (APIの公開などでimportのみ行い、ファイル内で使用しない場合があるため)
 "__init__.py" = ["F401"]
+# テストコードではクラス/メソッドごとの docstring を必須にしない
+"src/tests/**/*.py" = ["D101", "D102", "D415"]
 # docs/source/conf.py ファイルでは、E402 (モジュールレベルのimportがファイルの先頭にない) エラーを無視する
 # (sys.pathの変更後にimportを行う場合など)
 "docs/source/conf.py" = ["E402"]
